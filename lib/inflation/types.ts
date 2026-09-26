@@ -27,3 +27,18 @@ export type InflationCalculation = InflationRange & {
 export type InflationAnalytics = InflationCalculation & typeof CPI_SERIES & {
   fetchedAt: string;
 };
+
+/** One already-aggregated monthly amount in USD; negative refunds are allowed. */
+export type MonthlySpending = {
+  month: string; // YYYY-MM
+  nominal: number;
+};
+
+export type AdjustedSpending = {
+  targetMonth: string;
+  targetCpi: number | null;
+  spending: Array<MonthlySpending & {
+    sourceCpi: number | null;
+    adjusted: number | null;
+  }>;
+};

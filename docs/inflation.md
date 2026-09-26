@@ -3,6 +3,78 @@
 Status: calculations, the FRED client, the service, and the Next.js HTTP endpoint
 are implemented. The frontend can call GET /api/inflation.
 
+## Adjusting spending into a target month's dollars
+
+lib/inflation/adjustments.ts provides pure functions that accept data supplied
+by the caller. They do not access the database or FRED, and can be tested before
+the dashboard is connected. The existing /api/inflation response is unchanged.
+
+Formula: adjusted amount = original amount * (target CPI / original-month CPI).
+For example, $100 with original CPI 200 and target CPI 220 becomes $110 in the
+target month's dollars. This is a broad CPI comparison, not a prediction of a
+specific product's price or a person's actual spending.
+
+```ts
+import { adjustAmountForInflation, adjustMonthlySpending } from "../lib/inflation/adjustments";
+
+adjustAmountForInflation(100, 200, 220); // approximately 110
+
+const result = adjustMonthlySpending(
+  [
+    { month: "2024-01", nominal: 100 },
+    { month: "2024-02", nominal: 150 },
+  ],
+  [
+    { month: "2024-01", cpi: 200 },
+    { month: "2024-02", cpi: 210 },
+    { month: "2025-01", cpi: 220 },
+  ],
+  "2025-01",
+);
+// result.targetMonth === "2025-01"
+// result.targetCpi === 220
+// result.spending contains:
+// { month: "2024-01", nominal: 100, sourceCpi: 200, adjusted: ~110 }
+// { month: "2024-02", nominal: 150, sourceCpi: 210, adjusted: ~157.142857 }
+```
+
+Contract for the backend teammate:
+
+- Supply one aggregated USD nominal amount per month, using YYYY-MM strings
+  (not full dates or timestamps). Filter by user/accounts before aggregating.
+- Supply CPI observations for every source month and the explicit target month,
+  all from the same series and adjustment convention. The existing service's
+  observations can be passed directly if its requested range covers those months.
+- Convert database numeric strings to validated finite numbers at the query
+  boundary. Monthly totals must be finite numbers; invalid amounts throw RangeError.
+- Duplicate spending months and CPI months, and malformed dates, throw RangeError.
+  Input order is arbitrary; output is chronological. Inputs are not mutated.
+- Missing/non-positive/non-finite CPI produces null adjustments. A missing target
+  CPI makes all adjustments null, with no silent fallback or estimated CPI.
+- Zero amounts and negative amounts (such as refunds) are supported when CPI
+  is valid. No spending rows are invented for missing months.
+- The target may be before, after, or equal to the original month. No prior-year
+  data is needed for this conversion. Currency conversion is not performed.
+- The scalar helper returns null for invalid amounts, invalid CPI, or unrepresentable
+  results. Calculations retain floating-point precision; round only for display.
+
+Contract for the frontend teammate:
+
+- Label the comparison with result.targetMonth, for example "January 2025 dollars".
+  Do not call it "today's dollars" when the target is an older published month.
+- Map month to the chart's full-date format using month + "-01", nominal to nominal,
+  and adjusted to real. The current chart requires real: number; it will need to
+  accept null and render gaps/unavailable tooltips before using incomplete data.
+- Missing adjusted values are not zero and must not be replaced with nominal.
+  These functions do not generate provisional or forecast values.
+
+Target selection, fetching/querying spending, persistence in macro_cpi, and chart
+wiring remain integration work. The caller must explicitly choose a published
+target month or show an unavailable result; this module does not choose one.
+
+Validation for this addition: all 34 inflation tests pass (including nine new
+adjustment tests), along with repository lint and TypeScript no-emit checking.
+
 ## Getting real CPI data
 
 Call the service from a Next.js Server Component or a route using the Node
@@ -44,7 +116,8 @@ The check prints dates, observation count, and cumulative inflation, never the
 key or raw errors. Verified against FRED: January 2024 to January 2025 returned
 13 requested monthly observations and approximately 3.00048% cumulative inflation.
 
-Validation: 25 offline tests, repository lint, and the production build pass.
+The original CPI endpoint was validated with 25 offline tests, repository lint,
+and the production build. Dollar-adjustment tests run in the same test command.
 The built Next.js endpoint also returned HTTP 200 for the live example above
 and HTTP 400 when required query parameters were omitted.
 
@@ -149,6 +222,8 @@ References:
 - lib/inflation/calculations.test.ts: deterministic calculation tests.
 - lib/inflation/service.ts: validate inputs, obtain history, and assemble results.
 - lib/inflation/service.test.ts: mocked end-to-end service tests.
+- lib/inflation/adjustments.ts: scalar and monthly dollar-adjustment functions.
+- lib/inflation/adjustments.test.ts: deterministic dollar-adjustment tests.
 - lib/inflation/http.ts: request validation and safe HTTP error mapping.
 - lib/inflation/http.test.ts: HTTP contract and route wiring tests.
 - scripts/check-inflation.ts: explicit live smoke check without secret output.
@@ -252,7 +327,8 @@ errors or secrets.
 1. Complete: shared types, series metadata, calculations, and deterministic tests.
 2. Complete: FRED client, service, mocked tests, and a live provider check.
 3. Complete: integrate the HTTP adapter with the team's Next.js setup.
-4. Next: frontend display and team review of the feature branch.
+4. Complete locally: dollar-adjustment functions, tests, and teammate contracts.
+5. Next: connect real monthly spending, explicit target selection, and frontend display.
 
 Use the team's chosen test runner rather than introducing a separate project
 toolchain. Test calendar gaps, out-of-order input, missing baselines, deflation,
