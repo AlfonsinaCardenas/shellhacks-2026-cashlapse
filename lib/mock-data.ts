@@ -17,11 +17,6 @@ export type Statement = {
   status: StatementStatus;
 };
 
-export const mockUser = {
-  name: "Jane Doe",
-  email: "jane@example.com",
-};
-
 export const mockStatements: Statement[] = [
   { id: "1", fileName: "Chase_Business_Jan_2026.pdf", bankName: "Chase", uploadedAt: "2026-01-31", status: "COMPLETED" },
   { id: "2", fileName: "BofA_Savings_Jan_2026.csv", bankName: "Bank of America", uploadedAt: "2026-01-31", status: "PROCESSING" },

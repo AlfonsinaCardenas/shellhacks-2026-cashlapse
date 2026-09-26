@@ -1,7 +1,7 @@
 import { getInflationAnalytics } from "../lib/inflation/service.ts";
 import { FredError } from "../lib/fred/client.ts";
 
-// Run explicitly with --env-file=.env.local; never prints credentials or raw errors.
+// Run explicitly with --env-file=.env; never prints credentials or raw errors.
 try {
   const result = await getInflationAnalytics({ startMonth: "2024-01", endMonth: "2025-01" });
   console.log(JSON.stringify({
