@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { CalendarDays, ChevronDown, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/page-header";
 import { SpendingChart, type SpendingPoint } from "@/components/dashboard/spending-chart";
+import type { MonthlyTotals } from "@/lib/financial-statements";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -23,21 +25,47 @@ const RANGES = [
   { value: "2025-01-01", label: "Jan 2025 – Present" },
 ];
 
-type Totals = Record<"revenue" | "expenses" | "netIncome", { value: number; change: number }>;
+type Total = { value: number; change: number | null };
+type Totals = Record<"revenue" | "expenses" | "netIncome", Total>;
 
 type Props = {
-  totals: Totals;
+  monthly: MonthlyTotals[];
   spending: SpendingPoint[];
   accounts: string[];
 };
 
-export function DashboardView({ totals, spending, accounts }: Props) {
+// Sums the selected range and compares it with the same number of months
+// just before it ("Jan 2025 – Present" vs the equally long stretch before Jan 2025).
+function summarize(monthly: MonthlyTotals[], rangeStart: string): Totals {
+  const start = rangeStart.slice(0, 7);
+  const now = new Date();
+  const startDate = new Date(`${start}-01T00:00:00Z`);
+  const length =
+    (now.getUTCFullYear() - startDate.getUTCFullYear()) * 12 + now.getUTCMonth() - startDate.getUTCMonth() + 1;
+  const prevStart = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() - length, 1))
+    .toISOString()
+    .slice(0, 7);
+
+  const current = monthly.filter((m) => m.month >= start);
+  const previous = monthly.filter((m) => m.month >= prevStart && m.month < start);
+
+  const total = (key: keyof Totals): Total => {
+    const cur = current.reduce((s, m) => s + m[key], 0);
+    const prev = previous.reduce((s, m) => s + m[key], 0);
+    const change = previous.length && prev !== 0 ? Math.round(((cur - prev) / Math.abs(prev)) * 1000) / 10 : null;
+    return { value: Math.round(cur * 100) / 100, change };
+  };
+  return { revenue: total("revenue"), expenses: total("expenses"), netIncome: total("netIncome") };
+}
+
+export function DashboardView({ monthly, spending, accounts }: Props) {
   const [range, setRange] = useState(RANGES[0].value);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(accounts);
   const [inflationView, setInflationView] = useState(true);
 
   const rangeLabel = RANGES.find((r) => r.value === range)!.label;
   const data = useMemo(() => spending.filter((d) => d.month >= range), [spending, range]);
+  const totals = useMemo(() => summarize(monthly, range), [monthly, range]);
 
   const accountsLabel =
     selectedAccounts.length === accounts.length
@@ -121,7 +149,18 @@ export function DashboardView({ totals, spending, accounts }: Props) {
             {inflationView && <LegendItem color="var(--chart-2)" label="Today's dollars" />}
           </div>
         </div>
-        <SpendingChart data={data} showReal={inflationView} />
+        {data.length ? (
+          <SpendingChart data={data} showReal={inflationView} />
+        ) : (
+          <p className="flex h-[380px] items-center justify-center text-sm text-muted-foreground">
+            <span>
+              No confirmed transactions in this range yet.{" "}
+              <Link href="/upload" className="font-medium text-info hover:underline">
+                Upload a statement
+              </Link>
+            </span>
+          </p>
+        )}
       </section>
     </>
   );
@@ -137,19 +176,22 @@ function StatCard({
   goodWhenUp,
 }: {
   label: string;
-  total: { value: number; change: number };
+  total: Total;
   period: string;
   goodWhenUp: boolean;
 }) {
-  const good = total.change >= 0 === goodWhenUp;
+  const good = (total.change ?? 0) >= 0 === goodWhenUp;
   return (
     <div className="rounded-2xl border border-border bg-card p-7">
       <div className="mb-6 flex items-center justify-between">
         <span className="text-muted-foreground">{label}</span>
-        <span className={cn("text-sm font-semibold tabular-nums", good ? "text-success" : "text-destructive")}>
-          {total.change >= 0 ? "+" : ""}
-          {total.change}%
-        </span>
+        {/* no change % when there's no earlier period to compare against */}
+        {total.change !== null && (
+          <span className={cn("text-sm font-semibold tabular-nums", good ? "text-success" : "text-destructive")}>
+            {total.change >= 0 ? "+" : ""}
+            {total.change}%
+          </span>
+        )}
       </div>
       <p className="text-4xl font-bold tracking-tight tabular-nums">{formatMoney(total.value)}</p>
       <p className="mt-3 text-sm text-muted-foreground">{period}</p>

@@ -76,11 +76,39 @@ export async function POST(request: Request) {
         confirmed_at: new Date().toISOString(),
       },
     };
-    await client.query("UPDATE statements SET status = $1, extraction_payload = $2 WHERE id = $3", [
-      status,
-      confirmed,
-      statementId,
-    ]);
+    // Balance columns feed the balance sheet (lib/queries.ts).
+    await client.query(
+      `UPDATE statements SET status = $1, extraction_payload = $2,
+         account_identifier = NULLIF($4, ''), account_type = $5,
+         period_start = NULLIF($6, '')::date, period_end = NULLIF($7, '')::date,
+         starting_balance = $8, ending_balance = $9
+       WHERE id = $3`,
+      [
+        status,
+        confirmed,
+        statementId,
+        extraction.account_identifier,
+        extraction.account_type,
+        extraction.start_date,
+        extraction.end_date,
+        starting.toFixed(2),
+        ending.toFixed(2),
+      ],
+    );
+
+    // Same account, overlapping period: the ledger may now count some
+    // transactions twice. Worth a log line; not worth blocking the user.
+    const overlap = await client.query(
+      `SELECT file_name FROM statements
+       WHERE user_id = $1 AND id <> $2 AND bank_name = $3
+         AND account_identifier IS NOT DISTINCT FROM NULLIF($4, '')
+         AND status IN ('COMPLETED', 'NEEDS_VERIFICATION')
+         AND period_start <= NULLIF($6, '')::date AND period_end >= NULLIF($5, '')::date`,
+      [userId, statementId, extraction.bank_name, extraction.account_identifier, extraction.start_date, extraction.end_date],
+    );
+    if (overlap.rowCount) {
+      console.warn(`[confirm] ${statementId} overlaps ${overlap.rows.map((r) => r.file_name).join(", ")}`);
+    }
 
     // Replace this statement's ledger rows, so confirming again after a fix
     // doesn't double count. One UNNEST insert instead of N round trips.
