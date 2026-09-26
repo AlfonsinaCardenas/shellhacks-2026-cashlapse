@@ -77,6 +77,85 @@ adjustment tests), along with repository lint and TypeScript no-emit checking.
 
 ## Getting real CPI data
 
+### Monthly spending service for backend integration
+
+The server-only getAdjustedMonthlySpending function now connects monthly spending
+to live FRED CPI and the tested adjustment functions. It returns targetMonth,
+targetCpi, spending rows, source metadata, and fetchedAt. It does not query or
+write the database, and no spending amounts are sent to FRED.
+
+```ts
+import { getAdjustedMonthlySpending } from "@/lib/inflation/spending-service";
+
+// Replace this synthetic input with the backend's authenticated monthly query.
+const monthlySpending = [{ month: "2024-01", nominal: 100 }];
+const result = await getAdjustedMonthlySpending(monthlySpending, "2025-01");
+// Verified live: adjusted is approximately 103.00048 (display as $103.00).
+// Target label: January 2025 dollars.
+```
+
+One CPI request covers all spending months and the explicit target month (plus
+the existing provider client's year-ago lookback). Inputs are validated and copied
+before fetching. The service inherits the client's minimum starting year of 0002.
+An empty spending array returns an empty spending result with fetched target CPI.
+Missing target/source CPI stays null; provider errors propagate as FredError.
+Validation: all 40 inflation tests, repository lint, and the merged application's
+production build pass. The live synthetic-spending check also passed.
+The existing /api/inflation endpoint remains a CPI-only endpoint, not a spending
+endpoint. Backend owners can use this service in their authenticated P&L query
+or route; the HTTP adapter is not yet connected to monthly spending.
+
+Run the standalone live check with synthetic spending and real CPI:
+
+```bash
+node --conditions=react-server --env-file=.env.local scripts/check-adjusted-spending.ts
+```
+
+### Exact teammate handoff
+
+Person 2 (backend/database):
+
+- Provide a server-side query returning one { month: "YYYY-MM", nominal: number }
+  per month for the authenticated user and selected accounts/date range. Convert
+  PostgreSQL numeric strings to validated numbers before calling the service.
+- Confirm the initial operating-spending rule: EXPENSE transactions excluding
+  Transfers, from COMPLETED statements only. Decide how refunds should reduce
+  spending: the parser currently labels credits/refunds INCOME, so they cannot
+  all be subtracted indiscriminately as if they were expense refunds.
+- Confirm that database tables are deployed and supply a synthetic completed
+  statement with known totals for an integration test; do not send credentials.
+- The confirm route currently also writes NEEDS_VERIFICATION statements to the
+  ledger. A status-aware query must join statements. The existing monthly_pnl
+  aggregate does not include statement_id/status, so it cannot filter those rows
+  after aggregation without an agreed change to the data model/query.
+- Agree how account filters map to stored statement/account identifiers and who
+  owns the P&L endpoint or Server Component call. Current production authentication
+  remains a separate dependency: getSessionUserId returns null in production.
+
+Person 1 (frontend):
+
+- Consume the combined spending result once the backend exposes it. The chart
+  mapping is { month: row.month + "-01", nominal: row.nominal,
+  real: row.adjusted, provisional: false } for these published observations.
+- Accept real: number | null, leave chart gaps for missing CPI, and show an
+  unavailable tooltip rather than formatting null as money. Add loading/error
+  states and label the exact targetMonth instead of claiming current-day prices.
+- Coordinate filter changes with the backend query, rather than only filtering
+  the old mock chart locally.
+
+Person 3 (parser):
+
+- Confirm that Transfers includes credit-card payments/internal transfers and
+  clarify how actual purchase refunds can be distinguished from other INCOME.
+- Provide a synthetic PDF test case with known monthly expenses, a transfer,
+  and a refund so the team can verify the full flow together.
+
+Shared decision: choose a published target month (recommended eventual default:
+latest available published CPI, clearly labeled). Automatic target selection and
+macro_cpi persistence/refresh are not implemented by this new service.
+
+### CPI-only service
+
 Call the service from a Next.js Server Component or a route using the Node
 runtime. Keep FRED_API_KEY in .env.local (already declared in .env.example).
 Next.js loads that file; standalone Node commands need the --env-file flag.
@@ -222,6 +301,8 @@ References:
 - lib/inflation/calculations.test.ts: deterministic calculation tests.
 - lib/inflation/service.ts: validate inputs, obtain history, and assemble results.
 - lib/inflation/service.test.ts: mocked end-to-end service tests.
+- lib/inflation/spending-service.ts: connects monthly totals to FRED and adjustments.
+- lib/inflation/spending-service.test.ts: tests the combined spending service.
 - lib/inflation/adjustments.ts: scalar and monthly dollar-adjustment functions.
 - lib/inflation/adjustments.test.ts: deterministic dollar-adjustment tests.
 - lib/inflation/http.ts: request validation and safe HTTP error mapping.

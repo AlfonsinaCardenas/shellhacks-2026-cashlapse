@@ -42,3 +42,7 @@ export type AdjustedSpending = {
     adjusted: number | null;
   }>;
 };
+
+export type AdjustedSpendingAnalytics = AdjustedSpending & typeof CPI_SERIES & {
+  fetchedAt: string;
+};
