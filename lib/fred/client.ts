@@ -1,4 +1,5 @@
 // Node runtime only. Import from server components/routes, never client components.
+import "server-only";
 import { env } from "node:process";
 import { validateInflationRange } from "../inflation/calculations.ts";
 import { CPI_SERIES } from "../inflation/series.ts";

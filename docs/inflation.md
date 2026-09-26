@@ -1,7 +1,7 @@
 # CPI and inflation analytics
 
-Status: types, series metadata, calculations, the FRED client, and the service
-are implemented and tested. The HTTP adapter remains planned.
+Status: calculations, the FRED client, the service, and the Next.js HTTP endpoint
+are implemented. The frontend can call GET /api/inflation.
 
 ## Getting real CPI data
 
@@ -24,32 +24,60 @@ Adjust the import path to the calling file. The service automatically requests
 twelve months of extra history for year-over-year calculations. Requests use
 untransformed CPI levels, a ten-second timeout, and no response caching.
 
-The client uses Node's process module and rejects browser execution. Never
-import the client or service into a Client Component. Once the team installs
-Next.js and its dependencies, add the standard server-only package marker to
-these modules and verify the application build. No Next.js project or dependency
-manifest has been introduced by this module.
+The client, service, and HTTP adapter import the server-only marker, so Next.js
+rejects imports from Client Components. Fetch /api/inflation from browser code
+instead. This branch incorporates the team's Next.js setup from main.
 
 Run all offline tests with the installed Node 24 runtime:
 
 ```bash
-node --test lib/inflation/calculations.test.ts lib/inflation/service.test.ts lib/fred/client.test.ts
+npm run test:inflation
 ```
 
 Run an explicit live check (requires a configured key and network access):
 
 ```bash
-node --env-file=.env.local scripts/check-inflation.ts
+npm run check:inflation
 ```
 
 The check prints dates, observation count, and cumulative inflation, never the
 key or raw errors. Verified against FRED: January 2024 to January 2025 returned
 13 requested monthly observations and approximately 3.00048% cumulative inflation.
 
-Errors have stable codes for the future route: FRED_CONFIG (500), FRED_REQUEST
-or FRED_RESPONSE (502), and FRED_TIMEOUT (504). Invalid date ranges throw
-RangeError (400). Provider failures must not be presented as successful empty
+Validation: 25 offline tests, repository lint, and the production build pass.
+The built Next.js endpoint also returned HTTP 200 for the live example above
+and HTTP 400 when required query parameters were omitted.
+
+Errors have stable codes for the route: FRED_CONFIG (500), FRED_REQUEST
+or FRED_RESPONSE (502), and FRED_TIMEOUT (504). Invalid date ranges produce
+INVALID_RANGE (400); unexpected failures produce INTERNAL_ERROR (500).
+Provider failures must not be presented as successful empty
 data. Missing observations in a successful response remain null.
+
+On Windows PowerShell, use npm.cmd if execution policy blocks npm.ps1. The test
+and smoke-check scripts enable Node's react-server condition to load server-only
+modules outside Next.js. Never set this condition globally for the Next.js app.
+
+## Frontend handoff
+
+Start the application with npm run dev, then request:
+
+```text
+http://localhost:3000/api/inflation?startMonth=2024-01&endMonth=2025-01
+```
+
+```ts
+const query = new URLSearchParams({ startMonth: "2024-01", endMonth: "2025-01" });
+const response = await fetch(`/api/inflation?${query}`);
+const data = await response.json();
+if (!response.ok) throw new Error(data.error.message);
+// Display data.cumulativeInflationPercent and chart data.observations.
+// Display null as unavailable; it is not zero inflation.
+```
+
+Both parameters must appear exactly once. All responses use Cache-Control:
+no-store. Error bodies have the shape { error: { code, message } }. The endpoint
+uses the Node runtime; FRED_API_KEY must also be set in the deployment environment.
 
 ## Running the calculation module
 
@@ -83,9 +111,9 @@ Run from the repository root with the installed Node 24 runtime:
 node --test lib/inflation/calculations.test.ts
 ```
 
-These tests use Node's built-in runner without extra dependencies. Node executes
-the TypeScript but does not type-check it. A full TypeScript/Next.js build check
-will be needed when the application toolchain is initialized.
+These tests use Node's built-in runner. Node executes TypeScript without
+type-checking it; npm run build performs the full Next.js/TypeScript build.
+allowImportingTsExtensions permits the explicit .ts imports used by Node tests.
 
 ## Scope and ownership
 
@@ -95,7 +123,7 @@ personal inflation rate or forecast future CPI.
 
 Keep provider access in server-only modules and calculation functions independent
 of Next.js and network access. The application owner can call the service from a
-Server Component or expose the proposed route once the application is initialized.
+Server Component or use the implemented HTTP endpoint.
 
 ## Initial data series
 
@@ -121,8 +149,10 @@ References:
 - lib/inflation/calculations.test.ts: deterministic calculation tests.
 - lib/inflation/service.ts: validate inputs, obtain history, and assemble results.
 - lib/inflation/service.test.ts: mocked end-to-end service tests.
+- lib/inflation/http.ts: request validation and safe HTTP error mapping.
+- lib/inflation/http.test.ts: HTTP contract and route wiring tests.
 - scripts/check-inflation.ts: explicit live smoke check without secret output.
-- app/api/inflation/route.ts: planned thin HTTP adapter owned with the app team.
+- app/api/inflation/route.ts: thin Next.js GET adapter.
 
 If the initialized app uses src/, place app/ and lib/ under src/ consistently.
 
@@ -204,7 +234,7 @@ Data reflects the provider's current observations and may be revised; this
 version does not provide historical data vintages. If caching is introduced,
 retain the original fetchedAt timestamp and document the refresh policy.
 
-## Proposed HTTP adapter
+## HTTP endpoint
 
 GET /api/inflation?startMonth=2025-01&endMonth=2026-01
 
@@ -221,7 +251,8 @@ errors or secrets.
 
 1. Complete: shared types, series metadata, calculations, and deterministic tests.
 2. Complete: FRED client, service, mocked tests, and a live provider check.
-3. Next: integrate the HTTP adapter after the team initializes Next.js.
+3. Complete: integrate the HTTP adapter with the team's Next.js setup.
+4. Next: frontend display and team review of the feature branch.
 
 Use the team's chosen test runner rather than introducing a separate project
 toolchain. Test calendar gaps, out-of-order input, missing baselines, deflation,
