@@ -108,7 +108,7 @@ or route; the HTTP adapter is not yet connected to monthly spending.
 Run the standalone live check with synthetic spending and real CPI:
 
 ```bash
-node --conditions=react-server --env-file=.env.local scripts/check-adjusted-spending.ts
+node --conditions=react-server --env-file=.env scripts/check-adjusted-spending.ts
 ```
 
 ### Exact teammate handoff
@@ -157,7 +157,7 @@ macro_cpi persistence/refresh are not implemented by this new service.
 ### CPI-only service
 
 Call the service from a Next.js Server Component or a route using the Node
-runtime. Keep FRED_API_KEY in .env.local (already declared in .env.example).
+runtime. Keep FRED_API_KEY in .env (already declared in .env.example).
 Next.js loads that file; standalone Node commands need the --env-file flag.
 
 ```ts

@@ -333,7 +333,10 @@ Rules:
 - is_ai_tool is true for AI products and APIs: OpenAI, ChatGPT, Anthropic, Claude, Google Gemini, Midjourney,
   Cursor, GitHub Copilot, Perplexity, Replicate, Hugging Face, ElevenLabs, Runway, Jasper, Character.AI, and similar.
   Use category "AI Tools" for those.
-- Use "Transfers" for moves between the owner's own accounts and credit card payments.`;
+- Use "Transfers" for moves between the owner's own accounts and credit card payments.
+- Use "Loan Payments" for loan, mortgage, and auto loan payments.
+- Use "Owner Draws & Contributions" for money the owner takes out of or puts into the business for themselves.
+- Use "Revenue" only for money earned (client payments, sales, payouts). Refunds keep the category of the original purchase.`;
 
 export class GeminiParseError extends Error {}
 

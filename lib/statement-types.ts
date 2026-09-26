@@ -19,6 +19,8 @@ export const CATEGORIES = [
   "Insurance",
   "Bank Fees & Interest",
   "Taxes",
+  "Owner Draws & Contributions",
+  "Loan Payments",
   "Transfers",
   "Other",
 ] as const;

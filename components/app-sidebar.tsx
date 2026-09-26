@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { FileText, LayoutGrid, LogOut, RotateCw, Upload } from "lucide-react";
+import { FileText, LayoutGrid, LogOut, RotateCw, Scale, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/reports", label: "Reports", icon: Scale },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/statements", label: "Statements", icon: FileText },
 ];
