@@ -12,6 +12,7 @@
     "db:setup": "sh -c 'set -a; for f in .env .env.local; do [ -f \"$f\" ] && . \"./$f\"; done; set +a; psql \"$TIGER_DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/authjs.sql -f db/schema.sql'"
   },
   "dependencies": {
+    "@auth/pg-adapter": "^1.11.3",
     "@aws-sdk/client-s3": "^3.1141.0",
     "@base-ui/react": "^1.8.0",
     "@google/genai": "^2.24.0",
@@ -19,6 +20,7 @@
     "cn": "^0.4.0",
     "lucide-react": "^1.48.0",
     "next": "16.3.6",
+    "next-auth": "^4.24.15",
     "next-themes": "^0.4.6",
     "pdfjs-dist": "^6.3.289",
     "pg": "^8.23.0",

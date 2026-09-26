@@ -17,11 +17,6 @@ export type Statement = {
   status: StatementStatus;
 };
 
-export const mockUser = {
-  name: "Jane Doe",
-  email: "jane@example.com",
-};
-
 export const mockAccounts = [
   "Chase Business Checking",
   "Bank of America Savings",

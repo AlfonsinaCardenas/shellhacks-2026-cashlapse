@@ -29,3 +29,5 @@ next-env.d.ts
 *.tsbuildinfo
 .vercel
 *.pem
+# public CA cert for Tiger Data TLS (see lib/tigerdata.ts), not a secret
+!certs/timescale-ca.pem
