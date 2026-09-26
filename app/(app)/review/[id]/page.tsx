@@ -1,46 +1,85 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
-import { mockStatements } from "@/lib/mock-data";
+import { RedactionInspector } from "@/components/statement-parser/RedactionInspector";
+import { TransactionReviewTable } from "@/components/statement-parser/TransactionReviewTable";
+import { formatDate } from "@/lib/format";
+import type { StatementStatus } from "@/lib/mock-data";
+import { getSessionUserId } from "@/lib/session";
+import { isUuid, type StoredPayload } from "@/lib/statement-types";
+import { pool } from "@/lib/tigerdata";
 
-// Placeholder. The full review screen (redacted text, editable transactions,
-// balance check, confirm) is described in CLAUDE.md "Upload pipeline" step 7.
+type StatementRow = {
+  id: string;
+  file_name: string;
+  status: StatementStatus;
+  sent_to_gemini: string | null;
+  extraction_payload: StoredPayload | null;
+};
+
 export default async function ReviewPage({ params }: PageProps<"/review/[id]">) {
   const { id } = await params;
-  const statement = mockStatements.find((s) => s.id === id);
+  const userId = await getSessionUserId();
+  if (!userId) redirect("/");
+  if (!isUuid(id)) notFound();
+
+  const { rows } = await pool.query<StatementRow>(
+    `SELECT id, file_name, status, sent_to_gemini, extraction_payload
+     FROM statements WHERE id = $1 AND user_id = $2`,
+    [id, userId],
+  );
+  const statement = rows[0];
   if (!statement) notFound();
+
+  const payload = statement.extraction_payload;
+  const { extraction } = payload ?? {};
+  // After a confirm, show what the user saved rather than the raw AI output.
+  const current = payload?.confirmed ?? extraction;
 
   return (
     <>
-      <PageHeader eyebrow="Review" title={statement.fileName}>
+      <PageHeader eyebrow="Review" title={statement.file_name}>
         <StatusBadge status={statement.status} />
       </PageHeader>
 
-      {statement.status === "NEEDS_VERIFICATION" && (
-        <div className="mb-6 flex gap-3 rounded-xl border border-warning/30 bg-warning/10 px-5 py-4 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-          <p>
-            The transactions we found don&apos;t add up to the statement&apos;s ending balance. Check the rows below
-            before confirming.
+      {!payload || !extraction || !current || !statement.sent_to_gemini ? (
+        <div className="flex gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-5 py-4 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <p>This statement has no extracted data to review. Try uploading it again.</p>
+        </div>
+      ) : (
+        <div className="grid gap-6">
+          <p className="-mt-4 text-sm text-muted-foreground">
+            {extraction.bank_name}
+            {extraction.account_identifier && ` ${extraction.account_identifier}`} ·{" "}
+            {extraction.account_type === "CREDIT_CARD" ? "Credit card" : "Deposit account"}
+            {extraction.start_date && extraction.end_date && (
+              <>
+                {" "}
+                · {formatDate(extraction.start_date)} – {formatDate(extraction.end_date)}
+              </>
+            )}
           </p>
+
+          <TransactionReviewTable
+            // remount with fresh state after a confirm refreshes the page
+            key={payload.confirmed?.confirmed_at ?? "initial"}
+            statementId={statement.id}
+            accountType={extraction.account_type}
+            startingBalance={current.starting_balance}
+            endingBalance={current.ending_balance}
+            transactions={current.transactions}
+          />
+
+          <RedactionInspector
+            sentToGemini={statement.sent_to_gemini}
+            extraction={extraction}
+            redactions={payload.meta.redactions}
+            model={payload.meta.model}
+          />
         </div>
       )}
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <section className="rounded-2xl border border-border bg-card p-7">
-          <h2 className="mb-1 text-lg font-semibold">What we sent to AI</h2>
-          <p className="text-sm text-muted-foreground">
-            The redacted statement text will appear here, with personal info replaced by placeholders.
-          </p>
-        </section>
-        <section className="rounded-2xl border border-border bg-card p-7">
-          <h2 className="mb-1 text-lg font-semibold">Extracted transactions</h2>
-          <p className="text-sm text-muted-foreground">
-            An editable table of transactions will appear here, with a button to confirm.
-          </p>
-        </section>
-      </div>
     </>
   );
 }
