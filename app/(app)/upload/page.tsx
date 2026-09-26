@@ -1,17 +1,17 @@
 import { PageHeader } from "@/components/page-header";
-import { UploadPanel } from "@/components/upload/upload-panel";
+import { StatementUploader } from "@/components/statement-parser/StatementUploader";
 
-const STEPS = ["Uploading statements", "Reading transactions", "Checking balances", "Ready"];
+const STEPS = ["Uploading statements", "Removing personal info", "Reading transactions", "Review and confirm"];
 
 export default function UploadPage() {
   return (
     <>
       <PageHeader eyebrow="Import" title="Upload statements">
-        <p className="text-muted-foreground">Add checking, credit card, or savings statements together.</p>
+        <p className="text-muted-foreground">Add checking, credit card, or savings statements as PDFs.</p>
       </PageHeader>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-        <UploadPanel />
+        <StatementUploader />
 
         <aside className="rounded-2xl border border-border bg-card p-8">
           <h2 className="mb-6 text-lg font-semibold">What happens next</h2>
