@@ -24,3 +24,8 @@ out/
 # Claude Code instructions (local only)
 CLAUDE.md
 cashlapse-tdd.md
+# Next.js / TypeScript
+next-env.d.ts
+*.tsbuildinfo
+.vercel
+*.pem
