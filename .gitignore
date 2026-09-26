@@ -1,0 +1,26 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.log
+
+# Claude Code instructions (local only)
+CLAUDE.md
+cashlapse-tdd.md
