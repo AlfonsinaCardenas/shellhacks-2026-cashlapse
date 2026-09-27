@@ -18,6 +18,8 @@ import { SpendingChart, type SpendingPoint } from "@/components/dashboard/spendi
 import type { MonthlyTotals } from "@/lib/financial-statements";
 import { formatMoney, formatMonth } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CategoryChart } from "@/components/bea/category-chart";
+import type { CategoryPrice } from "@/lib/bea/statement-prices";
 
 const RANGES = [
   { value: "2023-01-01", label: "Jan 2023 – Present" },
@@ -33,6 +35,7 @@ type Props = {
   spending: SpendingPoint[];
   cpiTargetMonth: string | null;
   accounts: string[];
+  categories?: CategoryPrice[];
 };
 
 // Sums the selected range and compares it with the same number of months
@@ -59,7 +62,7 @@ function summarize(monthly: MonthlyTotals[], rangeStart: string): Totals {
   return { revenue: total("revenue"), expenses: total("expenses"), netIncome: total("netIncome") };
 }
 
-export function DashboardView({ monthly, spending, cpiTargetMonth, accounts }: Props) {
+export function DashboardView({ monthly, spending, cpiTargetMonth, accounts, categories = [] }: Props) {
   const [range, setRange] = useState(RANGES[0].value);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(accounts);
   const [inflationView, setInflationView] = useState(true);
@@ -145,9 +148,9 @@ export function DashboardView({ monthly, spending, cpiTargetMonth, accounts }: P
             <p className="mt-1 text-sm text-muted-foreground">
               {inflationView
                 ? cpiTargetMonth
-                  ? `Operating spend in ${adjustedLabel}, using published CPI data`
+                  ? `Spending in ${adjustedLabel}, using published CPI data`
                   : "CPI adjustment unavailable. Showing original spending amounts."
-                : "Operating spend as it was charged"}
+                : "Spending as it was charged"}
             </p>
           </div>
           <div className="flex items-center gap-5 text-sm text-muted-foreground">
@@ -174,6 +177,15 @@ export function DashboardView({ monthly, spending, cpiTargetMonth, accounts }: P
             </span>
           </p>
         )}
+      </section>
+      <section className="mt-6 rounded-2xl border border-border bg-card p-7">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold">Prices by category</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            The same spending, priced at the start of the BEA series and at the latest index. The label is how much that category's prices changed.
+          </p>
+        </div>
+        <CategoryChart rows={categories} />
       </section>
     </>
   );

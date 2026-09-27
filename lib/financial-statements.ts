@@ -48,7 +48,7 @@ export function sectionFor(category: string): PnlSection {
 // ---- P&L -------------------------------------------------------------------
 
 export type PnlInputRow = {
-  month?: string; // YYYY-MM, only needed for monthlyOperatingSpend
+  month?: string; // YYYY-MM, only needed for the monthly spend helpers
   category: string;
   transaction_type: TransactionType;
   is_ai_tool?: boolean;
@@ -159,6 +159,21 @@ export function monthlyOperatingSpend(rows: readonly PnlInputRow[]): { month: st
   const byMonth = new Map<string, number>();
   for (const row of rows) {
     if (!row.month || sectionFor(row.category) !== "OPERATING") continue;
+    const cents = toCents(row.total) * (row.transaction_type === "EXPENSE" ? 1 : -1);
+    byMonth.set(row.month, (byMonth.get(row.month) ?? 0) + cents);
+  }
+  return [...byMonth]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, cents]) => ({ month, nominal: fromCents(cents) }));
+}
+
+// Dashboard chart: operating expenses plus personal spending (groceries, shopping,
+// healthcare). Transfers and loan payments stay out so card payments aren't spend.
+export function monthlyDashboardSpend(rows: readonly PnlInputRow[]): { month: string; nominal: number }[] {
+  const byMonth = new Map<string, number>();
+  for (const row of rows) {
+    const section = sectionFor(row.category);
+    if (!row.month || (section !== "OPERATING" && section !== "PERSONAL")) continue;
     const cents = toCents(row.total) * (row.transaction_type === "EXPENSE" ? 1 : -1);
     byMonth.set(row.month, (byMonth.get(row.month) ?? 0) + cents);
   }
