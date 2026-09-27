@@ -1,6 +1,5 @@
 import "server-only";
-import { fetchCpiObservations } from "@/lib/fred/client";
-import { adjustMonthlySpending } from "@/lib/inflation/adjustments";
+import { buildDashboardPoints } from "@/lib/dashboard-series";
 import {
   accountLabel,
   buildPnl,
@@ -9,7 +8,8 @@ import {
   type MonthlyTotals,
   type PnlInputRow,
 } from "@/lib/financial-statements";
-import type { StatementStatus } from "@/lib/statement-types";
+import { CpiNotSyncedError, loadCpiTable } from "@/lib/inflation/cpi-store";
+import type { AccountType, StatementStatus } from "@/lib/statement-types";
 import { pool } from "@/lib/tigerdata";
 
 // Statements whose transactions are in the ledger.
@@ -60,50 +60,39 @@ export async function getAccountLabels(userId: string): Promise<string[]> {
   return rows.map(accountLabel).sort();
 }
 
-// Dashboard data: per-month P&L headline numbers plus operating and personal
-// spend in nominal and the latest published CPI month's dollars.
+// Dashboard data: per-month P&L headline numbers, plus chart points that put
+// income and spending (operating + personal, same as monthlyDashboardSpend)
+// next to CPI from macro_cpi, kept fresh by the daily /api/cron/sync-cpi job.
+// If CPI hasn't been synced yet the dashboard still works, just without
+// inflation-adjusted values.
 export async function getDashboardData(userId: string, from: string, to: string) {
-  const rows = await getPnlRows(userId, from, to);
+  const [rows, cpi] = await Promise.all([
+    getPnlRows(userId, from, to),
+    loadCpiTable().catch((err) => {
+      if (err instanceof CpiNotSyncedError) return null;
+      throw err;
+    }),
+  ]);
 
   const months = [...new Set(rows.map((r) => r.month!))].sort();
+  const spendByMonth = new Map(monthlyDashboardSpend(rows).map((s) => [s.month, s.nominal]));
   const monthly: MonthlyTotals[] = months.map((month) => {
     const pnl = buildPnl(rows.filter((r) => r.month === month));
-    return { month, revenue: pnl.revenue.total, expenses: pnl.operating.total, netIncome: pnl.netIncome };
+    return {
+      month,
+      revenue: pnl.revenue.total,
+      expenses: pnl.operating.total,
+      spending: spendByMonth.get(month) ?? 0,
+      netIncome: pnl.netIncome,
+    };
   });
 
-  const nominal = monthlyDashboardSpend(rows);
-  const adjustment = await adjustToLatestCpiDollars(nominal);
-  return { monthly, ...adjustment };
-}
+  // First to last month with statement data, gaps in between filled with 0.
+  // Stopping at the last data month (not today) matters: months after the
+  // latest uploaded statement aren't "$0 income", they're just not uploaded.
+  const points = months.length ? buildDashboardPoints(monthly, cpi, months[0], months[months.length - 1]) : [];
 
-// Restates each month's spend in the dollars of the latest month FRED has CPI
-// for. Missing CPI stays null; nominal spending remains available.
-async function adjustToLatestCpiDollars(spending: { month: string; nominal: number }[]) {
-  const fallback = {
-    cpiTargetMonth: null as string | null,
-    spending: spending.map((s) => ({ month: `${s.month}-01`, nominal: s.nominal, real: null as number | null })),
-  };
-  if (!spending.length) return fallback;
-
-  const thisMonth = new Date().toISOString().slice(0, 7);
-  try {
-    const { observations } = await fetchCpiObservations({ startMonth: spending[0].month, endMonth: thisMonth });
-    const target = observations.filter((o) => o.cpi !== null).at(-1)?.month;
-    if (!target) return fallback;
-
-    const adjusted = adjustMonthlySpending(spending, observations, target);
-    return {
-      cpiTargetMonth: target,
-      spending: adjusted.spending.map((s) => ({
-        month: `${s.month}-01`,
-        nominal: s.nominal,
-        real: s.adjusted,
-      })),
-    };
-  } catch (err) {
-    console.warn("[dashboard] CPI adjustment unavailable:", err instanceof Error ? err.message : err);
-    return fallback;
-  }
+  return { monthly, points, cpiTargetMonth: cpi?.latest?.month ?? null };
 }
 
 export type StatementListItem = {
@@ -111,6 +100,7 @@ export type StatementListItem = {
   file_name: string;
   bank_name: string | null;
   account_identifier: string | null;
+  account_type: AccountType | null;
   start_date: string | null;
   end_date: string | null;
   transaction_count: number | null;
@@ -124,6 +114,7 @@ export async function getStatements(userId: string): Promise<StatementListItem[]
   const { rows } = await pool.query<StatementListItem>(
     `SELECT id, file_name, bank_name,
             NULLIF(extraction_payload #>> '{extraction,account_identifier}', '') AS account_identifier,
+            NULLIF(extraction_payload #>> '{extraction,account_type}', '') AS account_type,
             NULLIF(extraction_payload #>> '{extraction,start_date}', '') AS start_date,
             NULLIF(extraction_payload #>> '{extraction,end_date}', '') AS end_date,
             jsonb_array_length(COALESCE(extraction_payload #> '{extraction,transactions}', '[]'::jsonb)) AS transaction_count,
@@ -131,6 +122,19 @@ export async function getStatements(userId: string): Promise<StatementListItem[]
      FROM statements WHERE user_id = $1
      ORDER BY created_at DESC`,
     [userId],
+  );
+  return rows;
+}
+
+// P&L inputs for a single statement. Reads the ledger directly because the
+// monthly_pnl aggregate has no statement column.
+export async function getStatementPnlRows(userId: string, statementId: string): Promise<PnlInputRow[]> {
+  const { rows } = await pool.query<PnlInputRow>(
+    `SELECT category, transaction_type, is_ai_tool, SUM(nominal_amount)::float8 AS total
+     FROM financial_ledger
+     WHERE user_id = $1 AND statement_id = $2
+     GROUP BY 1, 2, 3`,
+    [userId, statementId],
   );
   return rows;
 }

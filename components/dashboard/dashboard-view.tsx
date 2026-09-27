@@ -14,7 +14,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/page-header";
-import { SpendingChart, type SpendingPoint } from "@/components/dashboard/spending-chart";
+import { IncomeExpenseChart } from "@/components/dashboard/income-expense-chart";
+import { InflationComparisonChart, InflationLegend } from "@/components/dashboard/inflation-comparison-chart";
+import { indexSinceStart, type DashboardPoint } from "@/lib/dashboard-series";
 import type { MonthlyTotals } from "@/lib/financial-statements";
 import { formatMoney, formatMonth } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -32,7 +34,7 @@ type Totals = Record<"revenue" | "expenses" | "netIncome", Total>;
 
 type Props = {
   monthly: MonthlyTotals[];
-  spending: SpendingPoint[];
+  points: DashboardPoint[];
   cpiTargetMonth: string | null;
   accounts: string[];
   categories?: CategoryPrice[];
@@ -62,17 +64,28 @@ function summarize(monthly: MonthlyTotals[], rangeStart: string): Totals {
   return { revenue: total("revenue"), expenses: total("expenses"), netIncome: total("netIncome") };
 }
 
-export function DashboardView({ monthly, spending, cpiTargetMonth, accounts, categories = [] }: Props) {
+export function DashboardView({ monthly, points, cpiTargetMonth, accounts, categories = [] }: Props) {
   const [range, setRange] = useState(RANGES[0].value);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(accounts);
   const [inflationView, setInflationView] = useState(true);
 
   const rangeLabel = RANGES.find((r) => r.value === range)!.label;
-  const data = useMemo(() => spending.filter((d) => d.month >= range), [spending, range]);
+  const data = useMemo(() => points.filter((d) => d.month >= range), [points, range]);
+  const indexed = useMemo(() => indexSinceStart(data), [data]);
   const totals = useMemo(() => summarize(monthly, range), [monthly, range]);
   const adjustedLabel = cpiTargetMonth ? `${formatMonth(`${cpiTargetMonth}-01`)} dollars` : "CPI-adjusted";
-  const hasAdjusted = data.some((point) => point.real !== null);
-  const hasMissingCpi = data.some((point) => point.real === null);
+  const showReal = inflationView && cpiTargetMonth !== null;
+  const hasMissingCpi = data.some((point) => point.incomeReal === null);
+
+  // Stat-card subtitles: the same totals restated in the latest CPI month's
+  // dollars. Hidden if any month in the range has no CPI to convert with.
+  const realTotals = useMemo(() => {
+    const sum = (key: "incomeReal" | "expensesReal" | "netIncomeReal") =>
+      data.every((d) => d[key] !== null) ? data.reduce((s, d) => s + d[key]!, 0) : null;
+    return { revenue: sum("incomeReal"), expenses: sum("expensesReal"), netIncome: sum("netIncomeReal") };
+  }, [data]);
+  const realNote = (value: number | null) =>
+    showReal && value !== null ? `≈ ${formatMoney(value)} in ${adjustedLabel}` : undefined;
 
   const accountsLabel =
     selectedAccounts.length === accounts.length
@@ -136,38 +149,19 @@ export function DashboardView({ monthly, spending, cpiTargetMonth, accounts, cat
       </PageHeader>
 
       <div className="mb-6 grid gap-5 md:grid-cols-3">
-        <StatCard label="Gross Revenue" total={totals.revenue} period={rangeLabel} goodWhenUp />
-        <StatCard label="Operating Expenses" total={totals.expenses} period={rangeLabel} goodWhenUp={false} />
-        <StatCard label="Net Income" total={totals.netIncome} period={rangeLabel} goodWhenUp />
+        <StatCard label="Gross Revenue" total={totals.revenue} period={rangeLabel} real={realNote(realTotals.revenue)} goodWhenUp />
+        <StatCard
+          label="Operating Expenses"
+          total={totals.expenses}
+          period={rangeLabel}
+          real={realNote(realTotals.expenses)}
+          goodWhenUp={false}
+        />
+        <StatCard label="Net Income" total={totals.netIncome} period={rangeLabel} real={realNote(realTotals.netIncome)} goodWhenUp />
       </div>
 
-      <section className="rounded-2xl border border-border bg-card p-7">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold">Spending over time</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {inflationView
-                ? cpiTargetMonth
-                  ? `Spending in ${adjustedLabel}, using published CPI data`
-                  : "CPI adjustment unavailable. Showing original spending amounts."
-                : "Spending as it was charged"}
-            </p>
-          </div>
-          <div className="flex items-center gap-5 text-sm text-muted-foreground">
-            <LegendItem color="var(--chart-1)" label="Nominal" />
-            {inflationView && hasAdjusted && <LegendItem color="var(--chart-2)" label={adjustedLabel} />}
-          </div>
-        </div>
-        {inflationView && cpiTargetMonth && hasMissingCpi && (
-          <p className="mb-4 text-sm text-muted-foreground" role="status">
-            {hasAdjusted
-              ? "CPI is unavailable for some months. Gaps indicate unavailable adjustments; original amounts remain visible."
-              : "CPI adjustment is unavailable for this range. Showing original spending amounts."}
-          </p>
-        )}
-        {data.length ? (
-          <SpendingChart data={data} showReal={inflationView} adjustedLabel={adjustedLabel} />
-        ) : (
+      {data.length === 0 ? (
+        <section className="rounded-2xl border border-border bg-card p-7">
           <p className="flex h-[380px] items-center justify-center text-sm text-muted-foreground">
             <span>
               No confirmed transactions in this range yet.{" "}
@@ -176,13 +170,64 @@ export function DashboardView({ monthly, spending, cpiTargetMonth, accounts, cat
               </Link>
             </span>
           </p>
-        )}
-      </section>
+        </section>
+      ) : (
+        <div className="grid gap-6">
+          {!cpiTargetMonth && (
+            <p className="rounded-xl border border-border bg-card px-5 py-3 text-sm text-muted-foreground" role="status">
+              CPI data hasn&apos;t been synced yet, so amounts are shown as charged. Inflation comparisons appear after
+              the daily FRED sync runs.
+            </p>
+          )}
+
+          <section className="rounded-2xl border border-border bg-card p-7">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">Income vs expenses</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {showReal
+                    ? `Monthly totals in ${adjustedLabel}, adjusted with official CPI data.`
+                    : "Monthly totals as charged."}{" "}
+                  Expenses include personal spending; transfers are excluded.
+                </p>
+              </div>
+              <div className="flex items-center gap-5 text-sm text-muted-foreground">
+                <LegendItem color="var(--chart-1)" label="Income" />
+                <LegendItem color="var(--chart-2)" label="Expenses" />
+              </div>
+            </div>
+            {showReal && hasMissingCpi && (
+              <p className="mb-4 text-sm text-muted-foreground" role="status">
+                Some months are older than the stored CPI history, so they have no adjusted bars. Turn off Inflation
+                View to see them as charged.
+              </p>
+            )}
+            <IncomeExpenseChart data={data} showReal={showReal} adjustedLabel={adjustedLabel} />
+          </section>
+
+          <section className="rounded-2xl border border-border bg-card p-7">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">Your money vs inflation</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {data.length >= 6
+                    ? `% change since ${formatMonth(data[2].month)}, as 3-month averages.`
+                    : `% change since ${formatMonth(data[0].month)}.`}{" "}
+                  Lines above the dashed CPI line grew faster than prices.
+                </p>
+              </div>
+              <InflationLegend />
+            </div>
+            <InflationComparisonChart data={indexed} />
+          </section>
+        </div>
+      )}
+
       <section className="mt-6 rounded-2xl border border-border bg-card p-7">
         <div className="mb-4">
           <h2 className="text-lg font-semibold">Prices by category</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            The same spending, priced at the start of the BEA series and at the latest index. The label is how much that category's prices changed.
+            The same spending, priced at the start of the BEA series and at the latest index. The label is how much that category&apos;s prices changed.
           </p>
         </div>
         <CategoryChart rows={categories} />
@@ -198,11 +243,13 @@ function StatCard({
   label,
   total,
   period,
+  real,
   goodWhenUp,
 }: {
   label: string;
   total: Total;
   period: string;
+  real?: string; // inflation-adjusted equivalent, when Inflation View is on
   goodWhenUp: boolean;
 }) {
   const good = (total.change ?? 0) >= 0 === goodWhenUp;
@@ -220,6 +267,7 @@ function StatCard({
       </div>
       <p className="text-4xl font-bold tracking-tight tabular-nums">{formatMoney(total.value)}</p>
       <p className="mt-3 text-sm text-muted-foreground">{period}</p>
+      {real && <p className="mt-1 text-sm text-muted-foreground tabular-nums">{real}</p>}
     </div>
   );
 }

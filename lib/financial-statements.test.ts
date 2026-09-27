@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildBalanceSheet, buildPnl, monthlyDashboardSpend, monthlyOperatingSpend, type AccountBalance } from "./financial-statements.ts";
+import {
+  buildBalanceSheet,
+  buildPnl,
+  filterPnlSections,
+  FILTERABLE_SECTIONS,
+  monthlyDashboardSpend,
+  monthlyOperatingSpend,
+  type AccountBalance,
+  type PnlSection,
+} from "./financial-statements.ts";
 
 test("a card payment (both sides Transfers) doesn't change net income", () => {
   const base = [
@@ -95,4 +104,34 @@ test("balance sheet: deposits are assets, cards are liabilities, equity is the d
   assert.equal(sheet.assets.find((a) => a.bank_name === "Ally")?.stale, true);
   assert.equal(sheet.assets.find((a) => a.bank_name === "Chase")?.stale, false);
   assert.equal(sheet.liabilities[0].label, "Amex Card ••1001");
+});
+
+const SAMPLE = buildPnl([
+  { category: "Revenue", transaction_type: "INCOME", total: 5000 },
+  { category: "Payroll", transaction_type: "EXPENSE", total: 2000 },
+  { category: "Bank Fees & Interest", transaction_type: "EXPENSE", total: 25 },
+  { category: "Taxes", transaction_type: "EXPENSE", total: 475 },
+  { category: "Groceries", transaction_type: "EXPENSE", total: 300 },
+  { category: "Transfers", transaction_type: "EXPENSE", total: 800 },
+]);
+const except = (...hidden: PnlSection[]) =>
+  new Set<PnlSection>(FILTERABLE_SECTIONS.filter((s) => !hidden.includes(s)));
+
+test("filterPnlSections: everything visible is the unfiltered P&L", () => {
+  assert.deepEqual(filterPnlSections(SAMPLE, except()), SAMPLE);
+});
+
+test("filterPnlSections: hiding personal keeps business net income, drops the deduction", () => {
+  const pnl = filterPnlSections(SAMPLE, except("PERSONAL"));
+  assert.equal(pnl.netIncome, 2500);
+  assert.equal(pnl.personal.lines.length, 0);
+  assert.equal(pnl.netAfterPersonal, 2500);
+  assert.deepEqual(pnl.excluded, SAMPLE.excluded); // transfers memo is never filtered
+});
+
+test("filterPnlSections: hiding revenue leaves expenses only", () => {
+  const pnl = filterPnlSections(SAMPLE, except("REVENUE"));
+  assert.equal(pnl.operatingIncome, -2000);
+  assert.equal(pnl.netIncome, -2500);
+  assert.equal(pnl.netAfterPersonal, -2800);
 });
