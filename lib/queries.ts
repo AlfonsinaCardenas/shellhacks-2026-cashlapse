@@ -9,6 +9,7 @@ import {
   type MonthlyTotals,
   type PnlInputRow,
 } from "@/lib/financial-statements";
+import type { StatementStatus } from "@/lib/statement-types";
 import { pool } from "@/lib/tigerdata";
 
 // Statements whose transactions are in the ledger.
@@ -60,7 +61,7 @@ export async function getAccountLabels(userId: string): Promise<string[]> {
 }
 
 // Dashboard data: per-month P&L headline numbers plus operating and personal
-// spend in nominal and today's dollars.
+// spend in nominal and the latest published CPI month's dollars.
 export async function getDashboardData(userId: string, from: string, to: string) {
   const rows = await getPnlRows(userId, from, to);
 
@@ -71,16 +72,18 @@ export async function getDashboardData(userId: string, from: string, to: string)
   });
 
   const nominal = monthlyDashboardSpend(rows);
-  const spending = await adjustToTodaysDollars(nominal);
-  return { monthly, spending };
+  const adjustment = await adjustToLatestCpiDollars(nominal);
+  return { monthly, ...adjustment };
 }
 
 // Restates each month's spend in the dollars of the latest month FRED has CPI
-// for. If CPI is unavailable (no FRED_API_KEY, outage), "real" falls back to
-// nominal and the point is marked provisional.
-async function adjustToTodaysDollars(spending: { month: string; nominal: number }[]) {
-  const fallback = spending.map((s) => ({ month: `${s.month}-01`, nominal: s.nominal, real: s.nominal, provisional: true }));
-  if (!spending.length) return [];
+// for. Missing CPI stays null; nominal spending remains available.
+async function adjustToLatestCpiDollars(spending: { month: string; nominal: number }[]) {
+  const fallback = {
+    cpiTargetMonth: null as string | null,
+    spending: spending.map((s) => ({ month: `${s.month}-01`, nominal: s.nominal, real: null as number | null })),
+  };
+  if (!spending.length) return fallback;
 
   const thisMonth = new Date().toISOString().slice(0, 7);
   try {
@@ -89,14 +92,45 @@ async function adjustToTodaysDollars(spending: { month: string; nominal: number 
     if (!target) return fallback;
 
     const adjusted = adjustMonthlySpending(spending, observations, target);
-    return adjusted.spending.map((s) => ({
-      month: `${s.month}-01`,
-      nominal: s.nominal,
-      real: s.adjusted ?? s.nominal,
-      provisional: s.adjusted === null, // CPI for this month isn't published yet
-    }));
+    return {
+      cpiTargetMonth: target,
+      spending: adjusted.spending.map((s) => ({
+        month: `${s.month}-01`,
+        nominal: s.nominal,
+        real: s.adjusted,
+      })),
+    };
   } catch (err) {
     console.warn("[dashboard] CPI adjustment unavailable:", err instanceof Error ? err.message : err);
     return fallback;
   }
+}
+
+export type StatementListItem = {
+  id: string;
+  file_name: string;
+  bank_name: string | null;
+  account_identifier: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  transaction_count: number | null;
+  status: StatementStatus;
+  uploaded_at: string;
+};
+
+// Everything the user has uploaded, newest first. Account and period come
+// from the stored extraction so this works before the balance migration runs.
+export async function getStatements(userId: string): Promise<StatementListItem[]> {
+  const { rows } = await pool.query<StatementListItem>(
+    `SELECT id, file_name, bank_name,
+            NULLIF(extraction_payload #>> '{extraction,account_identifier}', '') AS account_identifier,
+            NULLIF(extraction_payload #>> '{extraction,start_date}', '') AS start_date,
+            NULLIF(extraction_payload #>> '{extraction,end_date}', '') AS end_date,
+            jsonb_array_length(COALESCE(extraction_payload #> '{extraction,transactions}', '[]'::jsonb)) AS transaction_count,
+            status, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS uploaded_at
+     FROM statements WHERE user_id = $1
+     ORDER BY created_at DESC`,
+    [userId],
+  );
+  return rows;
 }

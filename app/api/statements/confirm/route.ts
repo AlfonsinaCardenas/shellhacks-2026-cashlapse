@@ -1,17 +1,6 @@
 import { pool } from "@/lib/tigerdata";
 import { getSessionUserId } from "@/lib/session";
-import {
-  checkBalance,
-  isUuid,
-  parseTransaction,
-  toAmount,
-  type ApiError,
-  type ConfirmResponse,
-  type ExtractedTransaction,
-  type StoredPayload,
-} from "@/lib/statement-types";
-
-const MAX_TRANSACTIONS = 5000;
+import { checkBalance, isUuid, type ApiError, type ConfirmResponse, type StoredPayload } from "@/lib/statement-types";
 
 const error = (status: number, body: ApiError) => Response.json(body, { status });
 
@@ -30,18 +19,6 @@ export async function POST(request: Request) {
   if (!isUuid(statementId)) {
     return error(400, { error: "statement_id is missing or invalid." });
   }
-  if (!Array.isArray(body.transactions)) return error(400, { error: "transactions must be an array." });
-  if (body.transactions.length > MAX_TRANSACTIONS) return error(400, { error: "Too many transactions." });
-
-  // Validate every row; report the first few problems by row number.
-  const transactions: ExtractedTransaction[] = [];
-  const problems: string[] = [];
-  body.transactions.forEach((row, i) => {
-    const result = parseTransaction(row);
-    if (result.ok) transactions.push(result.value);
-    else problems.push(`Row ${i + 1}: ${result.error}`);
-  });
-  if (problems.length) return error(400, { error: problems.slice(0, 5).join("; ") });
 
   const client = await pool.connect();
   try {
@@ -59,9 +36,11 @@ export async function POST(request: Request) {
     const payload = found.rows[0].extraction_payload;
     const extraction = payload.extraction;
 
-    // The user may correct the balances on the review screen.
-    const starting = toAmount(body.starting_balance) ?? extraction.starting_balance;
-    const ending = toAmount(body.ending_balance) ?? extraction.ending_balance;
+    // Transactions aren't editable: save exactly what was extracted from the
+    // PDF. Nothing from the request body besides the id is trusted.
+    const transactions = extraction.transactions;
+    const starting = extraction.starting_balance;
+    const ending = extraction.ending_balance;
 
     // starting + credits - debits == ending (flipped for credit cards)
     const balance = checkBalance(extraction.account_type, starting, ending, transactions);

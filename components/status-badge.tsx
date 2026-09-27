@@ -1,4 +1,4 @@
-import type { StatementStatus } from "@/lib/mock-data";
+import type { StatementStatus } from "@/lib/statement-types";
 import { cn } from "@/lib/utils";
 
 const STYLES: Record<StatementStatus, { label: string; className: string }> = {

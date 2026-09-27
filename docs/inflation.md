@@ -3,6 +3,27 @@
 Status: calculations, the FRED client, the service, and the Next.js HTTP endpoint
 are implemented. The frontend can call GET /api/inflation.
 
+## Current dashboard integration
+
+The dashboard now queries real monthly operating spending through lib/queries.ts,
+fetches FRED observations, and selects the latest published CPI month. It passes
+cpiTargetMonth to the frontend so the subtitle, legend, and tooltip use the actual
+comparison month (for example, "Aug 2026 dollars"). Missing adjustments remain
+null and render as gaps with an "Unavailable" tooltip. A provider failure leaves
+original spending visible with an explicit unavailable message; it never copies
+nominal amounts into the adjusted series.
+
+Configure FRED_API_KEY in the ignored .env.local for local development. The
+deployment also needs its own server-side environment setting.
+
+Remaining integration work: account filters, the real statements history list,
+verification of the balance-column database migration and monthly aggregate
+refresh after uploads, and a complete signed-in upload-to-dashboard test.
+The team query currently includes ledger rows from NEEDS_VERIFICATION statements
+and nets income within operating categories against expenses. Confirm that policy
+before treating totals as verified gross spending. Earlier handoff notes below
+describe the original integration plan, not the current completion status.
+
 ## Adjusting spending into a target month's dollars
 
 lib/inflation/adjustments.ts provides pure functions that accept data supplied

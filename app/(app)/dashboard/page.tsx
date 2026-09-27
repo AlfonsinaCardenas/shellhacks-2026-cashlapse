@@ -18,7 +18,7 @@ export default async function DashboardPage() {
   const now = new Date();
   const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
 
-  const [{ monthly, spending }, accounts, categories] = await Promise.all([
+  const [{ monthly, spending, cpiTargetMonth }, accounts, categories] = await Promise.all([
     getDashboardData(userId, FROM, nextMonth),
     getAccountLabels(userId),
     statementCategoryPrices(userId).catch((err: unknown) => {
@@ -26,6 +26,14 @@ export default async function DashboardPage() {
       return [] as CategoryPrice[];
     }),
   ]);
-  
-  return <DashboardView monthly={monthly} spending={spending} accounts={accounts} categories={categories} />;
+
+  return (
+    <DashboardView
+      monthly={monthly}
+      spending={spending}
+      cpiTargetMonth={cpiTargetMonth}
+      accounts={accounts}
+      categories={categories}
+    />
+  );
 }

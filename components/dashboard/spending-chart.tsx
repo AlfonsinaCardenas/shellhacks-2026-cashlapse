@@ -12,14 +12,14 @@ import {
 } from "recharts";
 import { formatMoney, formatMoneyShort, formatMonth, formatMonthShort } from "@/lib/format";
 
-export type SpendingPoint = { month: string; nominal: number; real: number; provisional: boolean };
+export type SpendingPoint = { month: string; nominal: number; real: number | null };
 
 const NOMINAL = "var(--chart-1)";
 const REAL = "var(--chart-2)";
 
-type Props = { data: SpendingPoint[]; showReal: boolean };
+type Props = { data: SpendingPoint[]; showReal: boolean; adjustedLabel: string };
 
-export function SpendingChart({ data, showReal }: Props) {
+export function SpendingChart({ data, showReal, adjustedLabel }: Props) {
   // one tick every 6 months, like "Jan '23", "Jul '23"
   const ticks = data.filter((d) => [0, 6].includes(new Date(d.month).getUTCMonth())).map((d) => d.month);
 
@@ -52,7 +52,7 @@ export function SpendingChart({ data, showReal }: Props) {
           />
           <Tooltip
             content={({ active, payload }) => (
-              <ChartTooltip active={active} point={payload?.[0]?.payload} showReal={showReal} />
+              <ChartTooltip active={active} point={payload?.[0]?.payload} showReal={showReal} adjustedLabel={adjustedLabel} />
             )}
             cursor={{ stroke: "rgb(255 255 255 / 0.25)", strokeWidth: 1 }}
           />
@@ -60,6 +60,7 @@ export function SpendingChart({ data, showReal }: Props) {
           <Area
             type="monotone"
             dataKey={showReal ? "real" : "nominal"}
+            connectNulls={false}
             stroke="none"
             fill="url(#fill-top)"
             isAnimationActive={false}
@@ -69,7 +70,8 @@ export function SpendingChart({ data, showReal }: Props) {
             <Line
               type="monotone"
               dataKey="real"
-              name="Today's dollars"
+              name={adjustedLabel}
+              connectNulls={false}
               stroke={REAL}
               strokeWidth={2}
               dot={false}
@@ -97,10 +99,12 @@ function ChartTooltip({
   active,
   point,
   showReal,
+  adjustedLabel,
 }: {
   active?: boolean;
   point?: SpendingPoint;
   showReal: boolean;
+  adjustedLabel: string;
 }) {
   if (!active || !point) return null;
 
@@ -108,22 +112,21 @@ function ChartTooltip({
     <div className="min-w-44 rounded-lg border border-border bg-popover px-3 py-2.5 text-sm shadow-xl">
       <p className="mb-2 font-medium">
         {formatMonth(point.month)}
-        {point.provisional && <span className="ml-2 text-xs text-warning">provisional CPI</span>}
       </p>
       <TooltipRow color={NOMINAL} label="Nominal" value={point.nominal} />
-      {showReal && <TooltipRow color={REAL} label="Today's dollars" value={point.real} />}
+      {showReal && <TooltipRow color={REAL} label={adjustedLabel} value={point.real} />}
     </div>
   );
 }
 
-function TooltipRow({ color, label, value }: { color: string; label: string; value: number }) {
+function TooltipRow({ color, label, value }: { color: string; label: string; value: number | null }) {
   return (
     <div className="flex items-center justify-between gap-4 py-0.5">
       <span className="flex items-center gap-2 text-muted-foreground">
         <span className="size-2 rounded-full" style={{ background: color }} />
         {label}
       </span>
-      <span className="font-medium tabular-nums">{formatMoney(value)}</span>
+      <span className="font-medium tabular-nums">{value === null ? "Unavailable" : formatMoney(value)}</span>
     </div>
   );
 }
