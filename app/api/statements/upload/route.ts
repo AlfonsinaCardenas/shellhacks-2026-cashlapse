@@ -11,6 +11,13 @@ const MAX_BYTES = 20 * 1024 * 1024;
 
 const error = (status: number, body: ApiError) => Response.json(body, { status });
 
+// Google gives "Cárdenas"; statements usually print "CARDENAS". Try both.
+function accentVariants(name: string | null | undefined): string[] {
+  if (!name?.trim()) return [];
+  const plain = name.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return plain === name ? [name] : [name, plain];
+}
+
 export async function POST(request: Request) {
   // 1. Session
   const userId = await getSessionUserId();
@@ -45,10 +52,18 @@ export async function POST(request: Request) {
     return error(409, { error: `${fileName} was already uploaded.`, statement_id: existing.rows[0].id });
   }
 
-  // 3. Text + redaction
+  // 3. Text + redaction. The signed-in user's own name is always redacted, not
+  // just when the pattern rules happen to spot it.
+  const { rows: userRows } = await pool.query<{ name: string | null }>("SELECT name FROM users WHERE id = $1", [
+    userId,
+  ]);
+  const knownNames = accentVariants(userRows[0]?.name);
+
   let extracted;
   try {
-    extracted = await extractAndRedactPdf(buffer, typeof password === "string" ? password : undefined);
+    extracted = await extractAndRedactPdf(buffer, typeof password === "string" ? password : undefined, {
+      knownNames,
+    });
   } catch (err) {
     console.error("[upload] PDF extraction failed", err);
     return error(422, { error: "We couldn't read that PDF. It may be damaged." });
