@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Copy, FileText, KeyRound, Loader2, Lock, Upload, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, FileText, KeyRound, Loader2, Upload, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PdfPasswordModal } from "./PdfPasswordModal";
@@ -119,7 +119,7 @@ export function StatementUploader() {
   const locked = items.find((it) => it.status.kind === "needs-password");
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-8">
+    <section className="flex flex-col rounded-2xl border border-border bg-card p-8">
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -132,7 +132,7 @@ export function StatementUploader() {
           addFiles(e.dataTransfer.files);
         }}
         className={cn(
-          "flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-12 text-center transition-colors",
+          "flex min-h-[320px] flex-1 flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-12 text-center transition-colors",
           dragging ? "border-primary bg-primary/10" : "border-primary/70 bg-background/40",
         )}
       >
@@ -188,11 +188,6 @@ export function StatementUploader() {
           ))}
         </ul>
       )}
-
-      <p className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
-        <Lock className="size-4" />
-        Names, addresses, and account numbers are removed before anything is sent to AI
-      </p>
 
       <PdfPasswordModal
         fileName={locked?.file.name ?? null}

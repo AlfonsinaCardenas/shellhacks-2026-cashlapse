@@ -8,7 +8,7 @@ const features: { icon: LucideIcon; title: string; description: string }[] = [
   {
     icon: FileChartColumn,
     title: "Automatic P&L",
-    description: "Income, expenses by category and net income, built from your PDF or CSV statements.",
+    description: "Income, expenses by category and net income, built from your PDF statements.",
   },
   {
     icon: TrendingUp,
