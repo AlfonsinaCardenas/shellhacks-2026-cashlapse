@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildBalanceSheet, buildPnl, monthlyOperatingSpend, type AccountBalance } from "./financial-statements.ts";
+import { buildBalanceSheet, buildPnl, monthlyDashboardSpend, monthlyOperatingSpend, type AccountBalance } from "./financial-statements.ts";
 
 test("a card payment (both sides Transfers) doesn't change net income", () => {
   const base = [
@@ -71,6 +71,15 @@ test("monthly operating spend nets refunds and skips other sections", () => {
     { month: "2026-01", nominal: 60 },
     { month: "2026-02", nominal: 100 },
   ]);
+});
+
+test("dashboard spend includes personal categories and still skips transfers", () => {
+  const spend = monthlyDashboardSpend([
+    { month: "2026-01", category: "Travel", transaction_type: "EXPENSE", total: 100 },
+    { month: "2026-01", category: "Groceries", transaction_type: "EXPENSE", total: 40 },
+    { month: "2026-01", category: "Transfers", transaction_type: "EXPENSE", total: 999 },
+  ]);
+  assert.deepEqual(spend, [{ month: "2026-01", nominal: 140 }]);
 });
 
 test("balance sheet: deposits are assets, cards are liabilities, equity is the difference", () => {

@@ -4,7 +4,7 @@ import { adjustMonthlySpending } from "@/lib/inflation/adjustments";
 import {
   accountLabel,
   buildPnl,
-  monthlyOperatingSpend,
+  monthlyDashboardSpend,
   type AccountBalance,
   type MonthlyTotals,
   type PnlInputRow,
@@ -59,8 +59,8 @@ export async function getAccountLabels(userId: string): Promise<string[]> {
   return rows.map(accountLabel).sort();
 }
 
-// Dashboard data: per-month P&L headline numbers plus operating spend in
-// nominal and today's dollars.
+// Dashboard data: per-month P&L headline numbers plus operating and personal
+// spend in nominal and today's dollars.
 export async function getDashboardData(userId: string, from: string, to: string) {
   const rows = await getPnlRows(userId, from, to);
 
@@ -70,7 +70,7 @@ export async function getDashboardData(userId: string, from: string, to: string)
     return { month, revenue: pnl.revenue.total, expenses: pnl.operating.total, netIncome: pnl.netIncome };
   });
 
-  const nominal = monthlyOperatingSpend(rows);
+  const nominal = monthlyDashboardSpend(rows);
   const spending = await adjustToTodaysDollars(nominal);
   return { monthly, spending };
 }

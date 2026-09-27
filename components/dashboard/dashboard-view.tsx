@@ -143,8 +143,8 @@ export function DashboardView({ monthly, spending, accounts, categories = [] }: 
             <h2 className="text-lg font-semibold">Spending over time</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {inflationView
-                ? "Operating spend, adjusted to today's dollars using official CPI data"
-                : "Operating spend as it was charged"}
+                ? "Spending, adjusted to today's dollars using official CPI data"
+                : "Spending as it was charged"}
             </p>
           </div>
           <div className="flex items-center gap-5 text-sm text-muted-foreground">
@@ -169,7 +169,7 @@ export function DashboardView({ monthly, spending, accounts, categories = [] }: 
         <div className="mb-4">
           <h2 className="text-lg font-semibold">Prices by category</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Statement spending, repriced with the index for that category.
+            The same spending, priced at the start of the BEA series and at the latest index. The label is how much that category's prices changed.
           </p>
         </div>
         <CategoryChart rows={categories} />
