@@ -17,10 +17,10 @@ export default async function DashboardPage() {
   const now = new Date();
   const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
 
-  const [{ monthly, spending }, accounts] = await Promise.all([
+  const [{ monthly, spending, cpiTargetMonth }, accounts] = await Promise.all([
     getDashboardData(userId, FROM, nextMonth),
     getAccountLabels(userId),
   ]);
 
-  return <DashboardView monthly={monthly} spending={spending} accounts={accounts} />;
+  return <DashboardView monthly={monthly} spending={spending} cpiTargetMonth={cpiTargetMonth} accounts={accounts} />;
 }

@@ -16,7 +16,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { SpendingChart, type SpendingPoint } from "@/components/dashboard/spending-chart";
 import type { MonthlyTotals } from "@/lib/financial-statements";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatMonth } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const RANGES = [
@@ -31,6 +31,7 @@ type Totals = Record<"revenue" | "expenses" | "netIncome", Total>;
 type Props = {
   monthly: MonthlyTotals[];
   spending: SpendingPoint[];
+  cpiTargetMonth: string | null;
   accounts: string[];
 };
 
@@ -58,7 +59,7 @@ function summarize(monthly: MonthlyTotals[], rangeStart: string): Totals {
   return { revenue: total("revenue"), expenses: total("expenses"), netIncome: total("netIncome") };
 }
 
-export function DashboardView({ monthly, spending, accounts }: Props) {
+export function DashboardView({ monthly, spending, cpiTargetMonth, accounts }: Props) {
   const [range, setRange] = useState(RANGES[0].value);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(accounts);
   const [inflationView, setInflationView] = useState(true);
@@ -66,6 +67,9 @@ export function DashboardView({ monthly, spending, accounts }: Props) {
   const rangeLabel = RANGES.find((r) => r.value === range)!.label;
   const data = useMemo(() => spending.filter((d) => d.month >= range), [spending, range]);
   const totals = useMemo(() => summarize(monthly, range), [monthly, range]);
+  const adjustedLabel = cpiTargetMonth ? `${formatMonth(`${cpiTargetMonth}-01`)} dollars` : "CPI-adjusted";
+  const hasAdjusted = data.some((point) => point.real !== null);
+  const hasMissingCpi = data.some((point) => point.real === null);
 
   const accountsLabel =
     selectedAccounts.length === accounts.length
@@ -140,17 +144,26 @@ export function DashboardView({ monthly, spending, accounts }: Props) {
             <h2 className="text-lg font-semibold">Spending over time</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {inflationView
-                ? "Operating spend, adjusted to today's dollars using official CPI data"
+                ? cpiTargetMonth
+                  ? `Operating spend in ${adjustedLabel}, using published CPI data`
+                  : "CPI adjustment unavailable. Showing original spending amounts."
                 : "Operating spend as it was charged"}
             </p>
           </div>
           <div className="flex items-center gap-5 text-sm text-muted-foreground">
             <LegendItem color="var(--chart-1)" label="Nominal" />
-            {inflationView && <LegendItem color="var(--chart-2)" label="Today's dollars" />}
+            {inflationView && hasAdjusted && <LegendItem color="var(--chart-2)" label={adjustedLabel} />}
           </div>
         </div>
+        {inflationView && cpiTargetMonth && hasMissingCpi && (
+          <p className="mb-4 text-sm text-muted-foreground" role="status">
+            {hasAdjusted
+              ? "CPI is unavailable for some months. Gaps indicate unavailable adjustments; original amounts remain visible."
+              : "CPI adjustment is unavailable for this range. Showing original spending amounts."}
+          </p>
+        )}
         {data.length ? (
-          <SpendingChart data={data} showReal={inflationView} />
+          <SpendingChart data={data} showReal={inflationView} adjustedLabel={adjustedLabel} />
         ) : (
           <p className="flex h-[380px] items-center justify-center text-sm text-muted-foreground">
             <span>

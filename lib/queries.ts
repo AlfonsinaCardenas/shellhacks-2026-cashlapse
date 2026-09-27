@@ -60,7 +60,7 @@ export async function getAccountLabels(userId: string): Promise<string[]> {
 }
 
 // Dashboard data: per-month P&L headline numbers plus operating spend in
-// nominal and today's dollars.
+// nominal and the latest published CPI month's dollars.
 export async function getDashboardData(userId: string, from: string, to: string) {
   const rows = await getPnlRows(userId, from, to);
 
@@ -71,16 +71,18 @@ export async function getDashboardData(userId: string, from: string, to: string)
   });
 
   const nominal = monthlyOperatingSpend(rows);
-  const spending = await adjustToTodaysDollars(nominal);
-  return { monthly, spending };
+  const adjustment = await adjustToLatestCpiDollars(nominal);
+  return { monthly, ...adjustment };
 }
 
 // Restates each month's spend in the dollars of the latest month FRED has CPI
-// for. If CPI is unavailable (no FRED_API_KEY, outage), "real" falls back to
-// nominal and the point is marked provisional.
-async function adjustToTodaysDollars(spending: { month: string; nominal: number }[]) {
-  const fallback = spending.map((s) => ({ month: `${s.month}-01`, nominal: s.nominal, real: s.nominal, provisional: true }));
-  if (!spending.length) return [];
+// for. Missing CPI stays null; nominal spending remains available.
+async function adjustToLatestCpiDollars(spending: { month: string; nominal: number }[]) {
+  const fallback = {
+    cpiTargetMonth: null as string | null,
+    spending: spending.map((s) => ({ month: `${s.month}-01`, nominal: s.nominal, real: null as number | null })),
+  };
+  if (!spending.length) return fallback;
 
   const thisMonth = new Date().toISOString().slice(0, 7);
   try {
@@ -89,12 +91,14 @@ async function adjustToTodaysDollars(spending: { month: string; nominal: number 
     if (!target) return fallback;
 
     const adjusted = adjustMonthlySpending(spending, observations, target);
-    return adjusted.spending.map((s) => ({
-      month: `${s.month}-01`,
-      nominal: s.nominal,
-      real: s.adjusted ?? s.nominal,
-      provisional: s.adjusted === null, // CPI for this month isn't published yet
-    }));
+    return {
+      cpiTargetMonth: target,
+      spending: adjusted.spending.map((s) => ({
+        month: `${s.month}-01`,
+        nominal: s.nominal,
+        real: s.adjusted,
+      })),
+    };
   } catch (err) {
     console.warn("[dashboard] CPI adjustment unavailable:", err instanceof Error ? err.message : err);
     return fallback;
