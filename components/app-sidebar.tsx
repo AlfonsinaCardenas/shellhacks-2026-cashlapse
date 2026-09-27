@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { FileText, LayoutGrid, LogOut, RotateCw, Scale, Upload } from "lucide-react";
+import { FileText, LayoutGrid, LogOut, Scale, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -29,8 +29,8 @@ export function AppSidebar({ user }: Props) {
   return (
     <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-4 py-6">
       <Link href="/dashboard" className="mb-10 flex items-center gap-3 px-2">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/30">
-          <RotateCw className="size-5 text-white" strokeWidth={2.5} />
+        <span className="flex size-9 items-center justify-center rounded-xl bg-linear-to-b from-primary to-primary/60 text-lg font-semibold text-white shadow-lg shadow-primary/30">
+          C
         </span>
         <span className="text-xl font-semibold tracking-tight">Cashlapse</span>
       </Link>
