@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
-import { FileChartColumn, Sparkles, TrendingUp, type LucideIcon } from "lucide-react";
+import { FileChartColumn, TrendingUp, type LucideIcon } from "lucide-react";
 import { authOptions } from "@/lib/auth";
 import { SignInButton } from "@/components/sign-in-button";
 
@@ -14,11 +14,6 @@ const features: { icon: LucideIcon; title: string; description: string }[] = [
     icon: TrendingUp,
     title: "Inflation-adjusted totals",
     description: "Past spending shown in today’s dollars, using official CPI data.",
-  },
-  {
-    icon: Sparkles,
-    title: "AI tool spending",
-    description: "What you pay each month for ChatGPT, Claude, Cursor and other AI tools.",
   },
 ];
 
