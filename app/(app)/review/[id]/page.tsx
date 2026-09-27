@@ -1,8 +1,8 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { AlertTriangle, ExternalLink } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ExternalLink } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
-import { RedactionInspector } from "@/components/statement-parser/RedactionInspector";
 import { TransactionReviewTable } from "@/components/statement-parser/TransactionReviewTable";
 import { formatDate } from "@/lib/format";
 import { getSessionUserId } from "@/lib/session";
@@ -13,7 +13,6 @@ type StatementRow = {
   id: string;
   file_name: string;
   status: StatementStatus;
-  sent_to_gemini: string | null;
   extraction_payload: StoredPayload | null;
 };
 
@@ -24,7 +23,7 @@ export default async function ReviewPage({ params }: PageProps<"/review/[id]">) 
   if (!isUuid(id)) notFound();
 
   const { rows } = await pool.query<StatementRow>(
-    `SELECT id, file_name, status, sent_to_gemini, extraction_payload
+    `SELECT id, file_name, status, extraction_payload
      FROM statements WHERE id = $1 AND user_id = $2`,
     [id, userId],
   );
@@ -38,6 +37,13 @@ export default async function ReviewPage({ params }: PageProps<"/review/[id]">) 
 
   return (
     <>
+      <Link
+        href="/review"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="size-4" />
+        All statements to review
+      </Link>
       <PageHeader eyebrow="Review" title={statement.file_name}>
         <a
           href={`/api/statements/${statement.id}/file`}
@@ -51,7 +57,7 @@ export default async function ReviewPage({ params }: PageProps<"/review/[id]">) 
         <StatusBadge status={statement.status} />
       </PageHeader>
 
-      {!payload || !extraction || !current || !statement.sent_to_gemini ? (
+      {!payload || !extraction || !current ? (
         <div className="flex gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-5 py-4 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
           <p>This statement has no extracted data to review. Try uploading it again.</p>
@@ -77,13 +83,6 @@ export default async function ReviewPage({ params }: PageProps<"/review/[id]">) 
             endingBalance={current.ending_balance}
             transactions={current.transactions}
             saved={!!payload.confirmed}
-          />
-
-          <RedactionInspector
-            sentToGemini={statement.sent_to_gemini}
-            extraction={extraction}
-            redactions={payload.meta.redactions}
-            model={payload.meta.model}
           />
         </div>
       )}
