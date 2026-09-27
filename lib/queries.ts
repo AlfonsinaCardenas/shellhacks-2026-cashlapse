@@ -9,6 +9,7 @@ import {
   type MonthlyTotals,
   type PnlInputRow,
 } from "@/lib/financial-statements";
+import type { StatementStatus } from "@/lib/statement-types";
 import { pool } from "@/lib/tigerdata";
 
 // Statements whose transactions are in the ledger.
@@ -99,4 +100,33 @@ async function adjustToTodaysDollars(spending: { month: string; nominal: number 
     console.warn("[dashboard] CPI adjustment unavailable:", err instanceof Error ? err.message : err);
     return fallback;
   }
+}
+
+export type StatementListItem = {
+  id: string;
+  file_name: string;
+  bank_name: string | null;
+  account_identifier: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  transaction_count: number | null;
+  status: StatementStatus;
+  uploaded_at: string;
+};
+
+// Everything the user has uploaded, newest first. Account and period come
+// from the stored extraction so this works before the balance migration runs.
+export async function getStatements(userId: string): Promise<StatementListItem[]> {
+  const { rows } = await pool.query<StatementListItem>(
+    `SELECT id, file_name, bank_name,
+            NULLIF(extraction_payload #>> '{extraction,account_identifier}', '') AS account_identifier,
+            NULLIF(extraction_payload #>> '{extraction,start_date}', '') AS start_date,
+            NULLIF(extraction_payload #>> '{extraction,end_date}', '') AS end_date,
+            jsonb_array_length(COALESCE(extraction_payload #> '{extraction,transactions}', '[]'::jsonb)) AS transaction_count,
+            status, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS uploaded_at
+     FROM statements WHERE user_id = $1
+     ORDER BY created_at DESC`,
+    [userId],
+  );
+  return rows;
 }

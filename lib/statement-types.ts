@@ -27,6 +27,8 @@ export const CATEGORIES = [
 
 export type Category = (typeof CATEGORIES)[number];
 
+export type StatementStatus = "PROCESSING" | "NEEDS_REVIEW" | "NEEDS_VERIFICATION" | "COMPLETED" | "FAILED";
+
 export type TransactionType = "INCOME" | "EXPENSE";
 
 // DEPOSIT = checking/savings (balance is money you have).
