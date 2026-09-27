@@ -40,6 +40,15 @@ CREATE TABLE macro_cpi (
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE macro_pce (
+  year_month   VARCHAR(7) NOT NULL,
+  category     VARCHAR(40) NOT NULL
+               CHECK (category IN ('groceries','gas','bills','travel','restaurants')),
+  pce_index    NUMERIC(12,3) NOT NULL,
+  updated_at   TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (year_month, category)
+);
+
 CREATE MATERIALIZED VIEW monthly_pnl
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT time_bucket('1 month', transaction_time) AS month,
