@@ -1,6 +1,6 @@
 import { pool } from "@/lib/tigerdata";
 import { extractAndRedactPdf, GeminiParseError, hashFile, parsePdfWithGemini } from "@/lib/pdf-parser";
-import { statementKey, uploadStatementPdf } from "@/lib/r2";
+import { StorageConfigError, storeStatementPdf } from "@/lib/r2";
 import { getSessionUserId } from "@/lib/session";
 import type { ApiError, StoredPayload, UploadResponse } from "@/lib/statement-types";
 
@@ -45,17 +45,7 @@ export async function POST(request: Request) {
     return error(409, { error: `${fileName} was already uploaded.`, statement_id: existing.rows[0].id });
   }
 
-  // 3. Original PDF to R2. The key is deterministic, so a retry after the
-  //    password prompt just overwrites the same object.
-  const r2Key = statementKey(userId, fileHash);
-  try {
-    await uploadStatementPdf(r2Key, buffer);
-  } catch (err) {
-    console.error("[upload] R2 upload failed", err);
-    return error(502, { error: "Couldn't store the file. Try again in a moment." });
-  }
-
-  // 4. Text + redaction
+  // 3. Text + redaction
   let extracted;
   try {
     extracted = await extractAndRedactPdf(buffer, typeof password === "string" ? password : undefined);
@@ -77,7 +67,7 @@ export async function POST(request: Request) {
     });
   }
 
-  // 5. Gemini sees only the redacted text
+  // 4. Gemini sees only the redacted text
   const sentToGemini = extracted.redactedText;
   let parsed;
   try {
@@ -89,6 +79,20 @@ export async function POST(request: Request) {
         ? "The AI couldn't make sense of this statement. Make sure it's a bank or card statement."
         : "The AI service is unavailable right now. Try again in a moment.";
     return error(502, { error: message });
+  }
+
+  // 5. Keep the original PDF. Done only after a successful parse, so password
+  //    prompts and unreadable files don't leave orphans behind.
+  let r2Key: string;
+  try {
+    r2Key = await storeStatementPdf(userId, fileHash, buffer);
+  } catch (err) {
+    if (err instanceof StorageConfigError) {
+      console.error("[upload] storage misconfigured:", err.message);
+      return error(500, { error: "File storage isn't configured on the server." });
+    }
+    console.error("[upload] storing the PDF failed", err);
+    return error(502, { error: "Couldn't store the file. Try again in a moment." });
   }
 
   // 6. Save for review. ON CONFLICT covers two uploads of the same file racing.

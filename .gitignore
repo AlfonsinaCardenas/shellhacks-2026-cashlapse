@@ -9,6 +9,9 @@ node_modules/
 venv/
 __pycache__/
 
+# Locally stored statement PDFs (dev fallback when R2 isn't configured)
+.uploads/
+
 # Build output
 dist/
 build/
