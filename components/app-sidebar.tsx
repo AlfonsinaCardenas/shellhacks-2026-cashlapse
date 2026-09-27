@@ -2,20 +2,24 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, LayoutGrid, LogOut, RotateCw, Upload } from "lucide-react";
+import { signOut } from "next-auth/react";
+import { FileText, LayoutGrid, LogOut, RotateCw, Scale, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/reports", label: "Reports", icon: Scale },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/statements", label: "Statements", icon: FileText },
 ];
 
-type Props = { user: { name: string; email: string } };
+type Props = { user: { name: string | null; email: string } };
 
 export function AppSidebar({ user }: Props) {
   const pathname = usePathname();
-  const initials = user.name
+  // Google may not share a name; fall back to the email
+  const displayName = user.name || user.email;
+  const initials = displayName
     .split(" ")
     .map((part) => part[0])
     .join("")
@@ -58,13 +62,13 @@ export function AppSidebar({ user }: Props) {
           {initials}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{user.name}</p>
+          <p className="truncate text-sm font-medium">{displayName}</p>
           <p className="truncate text-xs text-muted-foreground">{user.email}</p>
         </div>
-        {/* TODO: wire to NextAuth signOut() */}
         <button
           type="button"
           aria-label="Sign out"
+          onClick={() => signOut({ callbackUrl: "/" })}
           className="rounded-md p-1.5 text-muted-foreground hover:bg-white/5 hover:text-foreground"
         >
           <LogOut className="size-4" />

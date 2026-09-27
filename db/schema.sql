@@ -13,6 +13,13 @@ CREATE TABLE statements (
                       CHECK (status IN ('PROCESSING','NEEDS_REVIEW','NEEDS_VERIFICATION','COMPLETED','FAILED')),
   sent_to_gemini      TEXT,
   extraction_payload  JSONB,
+  -- Filled in on confirm; the balance sheet reads these.
+  account_identifier  VARCHAR(16),
+  account_type        VARCHAR(12) CHECK (account_type IN ('DEPOSIT','CREDIT_CARD')),
+  period_start        DATE,
+  period_end          DATE,
+  starting_balance    NUMERIC(12,2),
+  ending_balance      NUMERIC(12,2),
   created_at          TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (user_id, file_hash)
 );

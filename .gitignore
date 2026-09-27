@@ -9,6 +9,9 @@ node_modules/
 venv/
 __pycache__/
 
+# Locally stored statement PDFs (dev fallback when R2 isn't configured)
+.uploads/
+
 # Build output
 dist/
 build/
@@ -29,3 +32,5 @@ next-env.d.ts
 *.tsbuildinfo
 .vercel
 *.pem
+# public CA cert for Tiger Data TLS (see lib/tigerdata.ts), not a secret
+!certs/timescale-ca.pem
