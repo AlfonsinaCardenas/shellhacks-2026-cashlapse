@@ -7,10 +7,10 @@ export function SignInButton() {
     <button
       type="button"
       onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-      className="flex h-11 w-full items-center justify-center gap-3 rounded-xl bg-white text-sm font-medium text-neutral-900 transition-colors hover:bg-white/90"
+      className="flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-white text-base font-medium text-neutral-900 transition-colors hover:bg-white/90"
     >
       <GoogleIcon />
-      Continue with Google
+      Sign in with Google
     </button>
   );
 }
