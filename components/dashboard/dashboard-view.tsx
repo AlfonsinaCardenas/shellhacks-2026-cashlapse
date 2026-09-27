@@ -18,6 +18,8 @@ import { SpendingChart, type SpendingPoint } from "@/components/dashboard/spendi
 import type { MonthlyTotals } from "@/lib/financial-statements";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CategoryChart } from "@/components/bea/category-chart";
+import type { CategoryPrice } from "@/lib/bea/statement-prices";
 
 const RANGES = [
   { value: "2023-01-01", label: "Jan 2023 – Present" },
@@ -32,6 +34,7 @@ type Props = {
   monthly: MonthlyTotals[];
   spending: SpendingPoint[];
   accounts: string[];
+  categories?: CategoryPrice[];
 };
 
 // Sums the selected range and compares it with the same number of months
@@ -58,7 +61,7 @@ function summarize(monthly: MonthlyTotals[], rangeStart: string): Totals {
   return { revenue: total("revenue"), expenses: total("expenses"), netIncome: total("netIncome") };
 }
 
-export function DashboardView({ monthly, spending, accounts }: Props) {
+export function DashboardView({ monthly, spending, accounts, categories = [] }: Props) {
   const [range, setRange] = useState(RANGES[0].value);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(accounts);
   const [inflationView, setInflationView] = useState(true);
@@ -161,6 +164,15 @@ export function DashboardView({ monthly, spending, accounts }: Props) {
             </span>
           </p>
         )}
+      </section>
+      <section className="mt-6 rounded-2xl border border-border bg-card p-7">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold">Prices by category</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Statement spending, repriced with the index for that category.
+          </p>
+        </div>
+        <CategoryChart rows={categories} />
       </section>
     </>
   );

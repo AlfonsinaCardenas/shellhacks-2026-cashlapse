@@ -16,26 +16,27 @@ const LABELS: Record<CategoryPrice["category"], string> = {
   restaurants: "Restaurants",
 };
 
-export async function statementCategoryPrices(): Promise<CategoryPrice[]> {
-  const { rows } = await beaPool.query<{
-    category: CategoryPrice["category"];
-    nominal: string;
-    today: string;
-  }>(`
-    WITH mapped AS (
-      SELECT
-        CASE category
-          WHEN 'Groceries' THEN 'groceries'
-          WHEN 'Transportation' THEN 'gas'
-          WHEN 'Rent & Utilities' THEN 'bills'
-          WHEN 'Travel' THEN 'travel'
-          WHEN 'Meals & Entertainment' THEN 'restaurants'
-        END AS pce_category,
-        nominal_amount,
-        to_char(transaction_time AT TIME ZONE 'UTC', 'YYYY-MM') AS year_month
-      FROM financial_ledger
-      WHERE transaction_type = 'EXPENSE'
-    ),
+export async function statementCategoryPrices(userId: string): Promise<CategoryPrice[]> {
+    const { rows } = await beaPool.query<{
+      category: CategoryPrice["category"];
+      nominal: string;
+      today: string;
+    }>(`
+      WITH mapped AS (
+        SELECT
+          CASE category
+            WHEN 'Groceries' THEN 'groceries'
+            WHEN 'Transportation' THEN 'gas'
+            WHEN 'Rent & Utilities' THEN 'bills'
+            WHEN 'Travel' THEN 'travel'
+            WHEN 'Meals & Entertainment' THEN 'restaurants'
+          END AS pce_category,
+          nominal_amount,
+          to_char(transaction_time AT TIME ZONE 'UTC', 'YYYY-MM') AS year_month
+        FROM financial_ledger
+        WHERE transaction_type = 'EXPENSE'
+          AND user_id = $1
+      ),
     latest AS (
       SELECT DISTINCT ON (category) category, pce_index
       FROM macro_pce
@@ -53,7 +54,7 @@ export async function statementCategoryPrices(): Promise<CategoryPrice[]> {
     WHERE m.pce_category IS NOT NULL
     GROUP BY m.pce_category
     ORDER BY m.pce_category
-  `);
+  `, [userId]);
 
   return rows.map((row) => {
     const nominal = Number(row.nominal);
