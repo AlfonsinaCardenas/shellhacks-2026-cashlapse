@@ -1,6 +1,6 @@
 # Cashlapse
 
-Upload your bank statements and get a P&L that shows what your past spending is worth in today's dollars, plus how much you spend on AI tools.
+Upload your bank statements and get a P&L that shows what your past spending is worth in today's dollars.
 
 **Live app:** https://cashlapse.vercel.app
 
