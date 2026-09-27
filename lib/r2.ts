@@ -1,9 +1,9 @@
 // Server-only: where original statement PDFs are kept.
 // Cloudflare R2 (S3-compatible API) when configured. In local development
 // with no R2 settings at all, falls back to a gitignored .uploads/ folder.
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const R2_VARS = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"] as const;
 const LOCAL_DIR = path.join(process.cwd(), ".uploads");
@@ -63,4 +63,37 @@ export async function storeStatementPdf(userId: string, fileHash: string, body: 
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, body);
   return `local:${key}`;
+}
+
+// The file isn't in storage (deleted, or saved somewhere this server can't see).
+export class StoredFileMissingError extends Error {}
+
+// Reads a PDF back using the key storeStatementPdf returned.
+export async function readStatementPdf(key: string): Promise<Buffer> {
+  if (key.startsWith("local:")) {
+    const file = path.join(LOCAL_DIR, ...key.slice("local:".length).split("/"));
+    // Keys come from our own DB, but never let one point outside .uploads/.
+    if (!file.startsWith(LOCAL_DIR + path.sep)) throw new StoredFileMissingError("Invalid local key");
+    try {
+      return await readFile(file);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new StoredFileMissingError(key);
+      throw err;
+    }
+  }
+
+  const missing = R2_VARS.filter((name) => !process.env[name]?.trim());
+  if (missing.length) throw new StorageConfigError(`Can't read from R2; missing ${missing.join(", ")}`);
+
+  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET } = process.env;
+  try {
+    const res = await getClient(R2_ACCOUNT_ID!, R2_ACCESS_KEY_ID!, R2_SECRET_ACCESS_KEY!).send(
+      new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }),
+    );
+    if (!res.Body) throw new StoredFileMissingError(key);
+    return Buffer.from(await res.Body.transformToByteArray());
+  } catch (err) {
+    if ((err as { name?: string }).name === "NoSuchKey") throw new StoredFileMissingError(key);
+    throw err;
+  }
 }

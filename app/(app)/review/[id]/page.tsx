@@ -1,13 +1,12 @@
 import { notFound, redirect } from "next/navigation";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ExternalLink } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { RedactionInspector } from "@/components/statement-parser/RedactionInspector";
 import { TransactionReviewTable } from "@/components/statement-parser/TransactionReviewTable";
 import { formatDate } from "@/lib/format";
-import type { StatementStatus } from "@/lib/mock-data";
 import { getSessionUserId } from "@/lib/session";
-import { isUuid, type StoredPayload } from "@/lib/statement-types";
+import { isUuid, type StatementStatus, type StoredPayload } from "@/lib/statement-types";
 import { pool } from "@/lib/tigerdata";
 
 type StatementRow = {
@@ -40,6 +39,15 @@ export default async function ReviewPage({ params }: PageProps<"/review/[id]">) 
   return (
     <>
       <PageHeader eyebrow="Review" title={statement.file_name}>
+        <a
+          href={`/api/statements/${statement.id}/file`}
+          target="_blank"
+          rel="noopener"
+          className="inline-flex items-center gap-2 text-sm font-medium text-info hover:underline"
+        >
+          <ExternalLink className="size-4" />
+          View original PDF
+        </a>
         <StatusBadge status={statement.status} />
       </PageHeader>
 
@@ -63,13 +71,12 @@ export default async function ReviewPage({ params }: PageProps<"/review/[id]">) 
           </p>
 
           <TransactionReviewTable
-            // remount with fresh state after a confirm refreshes the page
-            key={payload.confirmed?.confirmed_at ?? "initial"}
             statementId={statement.id}
             accountType={extraction.account_type}
             startingBalance={current.starting_balance}
             endingBalance={current.ending_balance}
             transactions={current.transactions}
+            saved={!!payload.confirmed}
           />
 
           <RedactionInspector
