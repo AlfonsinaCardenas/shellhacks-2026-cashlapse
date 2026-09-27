@@ -1,12 +1,44 @@
-import type { ReactNode } from "react";
-import { ArrowRightLeft, Sparkles } from "lucide-react";
-import type { Pnl, PnlSectionResult } from "@/lib/financial-statements";
+"use client";
+
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowRightLeft, Check, Sparkles } from "lucide-react";
+import {
+  filterPnlSections,
+  FILTERABLE_SECTIONS,
+  SECTION_LABELS,
+  type Pnl,
+  type PnlSection,
+  type PnlSectionResult,
+} from "@/lib/financial-statements";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type Props = { pnl: Pnl; periodLabel: string };
 
-export function PnlStatement({ pnl, periodLabel }: Props) {
+// Short chip labels; the section headings keep their full names.
+const CHIP_LABELS: Record<(typeof FILTERABLE_SECTIONS)[number], string> = {
+  REVENUE: "Revenue",
+  OPERATING: "Operating expenses",
+  OTHER: "Other",
+  TAXES: "Taxes",
+  PERSONAL: "Personal",
+};
+
+export function PnlStatement({ pnl: full, periodLabel }: Props) {
+  const [visible, setVisible] = useState<ReadonlySet<PnlSection>>(() => new Set(FILTERABLE_SECTIONS));
+  const pnl = useMemo(() => filterPnlSections(full, visible), [full, visible]);
+  const hidden = FILTERABLE_SECTIONS.filter((s) => !visible.has(s));
+  const shown = (s: PnlSection) => visible.has(s);
+
+  function toggle(section: PnlSection) {
+    setVisible((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
+  }
+
   const empty =
     !pnl.revenue.lines.length &&
     !pnl.operating.lines.length &&
@@ -29,20 +61,45 @@ export function PnlStatement({ pnl, periodLabel }: Props) {
         )}
       </div>
 
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Sections to include">
+        {FILTERABLE_SECTIONS.map((section) => (
+          <button
+            key={section}
+            type="button"
+            aria-pressed={shown(section)}
+            onClick={() => toggle(section)}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition-colors",
+              shown(section)
+                ? "border-primary/40 bg-primary/15 text-foreground"
+                : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {shown(section) && <Check className="size-3.5 text-info" />}
+            {CHIP_LABELS[section]}
+          </button>
+        ))}
+      </div>
+      {hidden.length > 0 && (
+        <p className="mb-4 text-xs text-muted-foreground" role="status">
+          Totals exclude hidden sections: {hidden.map((s) => SECTION_LABELS[s]).join(", ")}.
+        </p>
+      )}
+
       {empty ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          No confirmed transactions in this period.
+          {hidden.length ? "Nothing to show with the selected sections." : "No transactions on this statement."}
         </p>
       ) : (
         <div className="text-sm tabular-nums">
-          <Section data={pnl.revenue} totalLabel="Total revenue" />
-          <Section data={pnl.operating} totalLabel="Total operating expenses" />
+          {shown("REVENUE") && <Section data={pnl.revenue} totalLabel="Total revenue" />}
+          {shown("OPERATING") && <Section data={pnl.operating} totalLabel="Total operating expenses" />}
           <Result label="Operating income" value={pnl.operatingIncome} />
-          {pnl.other.lines.length > 0 && <Section data={pnl.other} totalLabel="Total other, net" />}
-          {pnl.taxes.lines.length > 0 && <Section data={pnl.taxes} totalLabel="Total taxes" />}
+          {shown("OTHER") && pnl.other.lines.length > 0 && <Section data={pnl.other} totalLabel="Total other, net" />}
+          {shown("TAXES") && pnl.taxes.lines.length > 0 && <Section data={pnl.taxes} totalLabel="Total taxes" />}
           <Result label="Net income" value={pnl.netIncome} strong />
 
-          {pnl.personal.lines.length > 0 && (
+          {shown("PERSONAL") && pnl.personal.lines.length > 0 && (
             <>
               <Section data={pnl.personal} totalLabel="Total personal & draws" />
               <Result label="Left after personal spending" value={pnl.netAfterPersonal} />

@@ -150,8 +150,39 @@ export function buildPnl(rows: readonly PnlInputRow[]): Pnl {
   };
 }
 
-// Headline numbers for one month, used by the dashboard stat cards.
-export type MonthlyTotals = { month: string; revenue: number; expenses: number; netIncome: number };
+// Sections the Reports tab lets the user hide. "Excluded" is always a memo.
+export const FILTERABLE_SECTIONS = ["REVENUE", "OPERATING", "OTHER", "TAXES", "PERSONAL"] as const;
+
+// Hides sections and recomputes every subtotal from what's left, so the
+// totals always describe exactly what's on screen. In cents, like buildPnl.
+export function filterPnlSections(pnl: Pnl, visible: ReadonlySet<PnlSection>): Pnl {
+  const keep = (s: PnlSectionResult): PnlSectionResult => (visible.has(s.section) ? s : { ...s, lines: [], total: 0 });
+  const revenue = keep(pnl.revenue);
+  const operating = keep(pnl.operating);
+  const other = keep(pnl.other);
+  const taxes = keep(pnl.taxes);
+  const personal = keep(pnl.personal);
+
+  const operatingIncome = toCents(revenue.total) - toCents(operating.total);
+  const netIncome = operatingIncome - toCents(other.total) - toCents(taxes.total);
+
+  return {
+    ...pnl,
+    revenue,
+    operating,
+    other,
+    taxes,
+    personal,
+    operatingIncome: fromCents(operatingIncome),
+    netIncome: fromCents(netIncome),
+    netAfterPersonal: fromCents(netIncome - toCents(personal.total)),
+  };
+}
+
+// Headline numbers for one month. `expenses` is the P&L's operating expenses
+// (the "Operating Expenses" stat card); `spending` is the dashboard charts'
+// broader spend: operating + personal, from monthlyDashboardSpend.
+export type MonthlyTotals = { month: string; revenue: number; expenses: number; spending: number; netIncome: number };
 
 // Operating expenses per month, the "spend" the inflation chart adjusts.
 // Shape matches MonthlySpending in lib/inflation/types.ts.
